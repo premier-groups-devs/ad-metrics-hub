@@ -17,7 +17,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -34,7 +33,7 @@ public class GoogleAdsAPICampaigns {
     private static final String CREDENTIALS_PATH = dotenv.get("GOOGLE_CREDENTIALS_PATH");
     private static final long MCC_CUSTOMER_ID = Long.parseLong(dotenv.get("GOOGLE_ADS_MCC_CUSTOMER_ID", "9335572227"));
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         GoogleAdsAPICampaigns reporter = new GoogleAdsAPICampaigns();
 
         GoogleAdsClient googleAdsClient = null;
@@ -47,7 +46,7 @@ public class GoogleAdsAPICampaigns {
 
         try {
             // Usar el ID de MCC desde el archivo .env
-            reporter.reportAllManagedAccountsCampaigns(googleAdsClient, MCC_CUSTOMER_ID);
+            reporter.reportAllManagedAccountsCampaigns(googleAdsClient);
         } catch (GoogleAdsException gae) {
             System.err.printf(
                     "Request ID %s falló debido a GoogleAdsException. Errores:%n",
@@ -79,14 +78,13 @@ public class GoogleAdsAPICampaigns {
      * Lista todas las cuentas gestionadas y reporta el rendimiento de sus campañas.
      *
      * @param googleAdsClient el cliente de Google Ads API
-     * @param mccCustomerId   ID del cliente MCC
      * @throws GoogleAdsException si la solicitud API falla con uno o más errores
      */
-    private void reportAllManagedAccountsCampaigns(GoogleAdsClient googleAdsClient, long mccCustomerId) {
+    private void reportAllManagedAccountsCampaigns(GoogleAdsClient googleAdsClient) {
         try (GoogleAdsServiceClient googleAdsServiceClient =
                      googleAdsClient.getLatestVersion().createGoogleAdsServiceClient()) {
 
-            System.out.println("Listando cuentas gestionadas para MCC ID: " + mccCustomerId);
+            System.out.println("Listando cuentas gestionadas para MCC ID: " + GoogleAdsAPICampaigns.MCC_CUSTOMER_ID);
 
             // Consulta para obtener las cuentas administradas
             String query = "SELECT customer_client.id, customer_client.descriptive_name, customer_client.status " +
@@ -96,7 +94,7 @@ public class GoogleAdsAPICampaigns {
             // Construye la petición
             SearchGoogleAdsStreamRequest request =
                     SearchGoogleAdsStreamRequest.newBuilder()
-                            .setCustomerId(Long.toString(mccCustomerId))
+                            .setCustomerId(Long.toString(GoogleAdsAPICampaigns.MCC_CUSTOMER_ID))
                             .setQuery(query)
                             .build();
 
@@ -114,7 +112,7 @@ public class GoogleAdsAPICampaigns {
                     String accountName = googleAdsRow.getCustomerClient().getDescriptiveName();
 
                     System.out.println("==================================================");
-                    System.out.println("📊 Account ID: " + accountId);
+                    System.out.println("📊 Account Name: " + accountName);
                     System.out.println("==================================================");
 
                     // Consulta el rendimiento de las campañas para esta cuenta
@@ -171,19 +169,12 @@ public class GoogleAdsAPICampaigns {
             // Almacenar todos los resultados para ordenarlos
             List<GoogleAdsRow> rows = new ArrayList<>();
             for (SearchGoogleAdsStreamResponse response : stream) {
-                for (GoogleAdsRow row : response.getResultsList()) {
-                    rows.add(row);
-                }
+                rows.addAll(response.getResultsList());
             }
 
             // Ordenar por costo descendente
-            Collections.sort(rows, new Comparator<GoogleAdsRow>() {
-                @Override
-                public int compare(GoogleAdsRow row1, GoogleAdsRow row2) {
-                    return Long.compare(row2.getMetrics().getCostMicros(),
-                            row1.getMetrics().getCostMicros());
-                }
-            });
+            rows.sort((row1, row2) -> Long.compare(row2.getMetrics().getCostMicros(),
+                    row1.getMetrics().getCostMicros()));
 
             // Mostrar los resultados
             for (int i = 0; i < rows.size(); i++) {
