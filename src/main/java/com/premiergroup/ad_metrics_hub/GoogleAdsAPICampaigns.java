@@ -28,7 +28,6 @@ public class GoogleAdsAPICampaigns {
     // Cargar variables de entorno usando dotenv
     private static final Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
 
-    //    private static final Dotenv dotenv = Dotenv.configure().directory("src/main/resources").load();
     private static final String DEVELOPER_TOKEN = dotenv.get("GOOGLE_ADS_DEVELOPER_TOKEN");
     private static final String CREDENTIALS_PATH = dotenv.get("GOOGLE_CREDENTIALS_PATH");
     private static final long MCC_CUSTOMER_ID = Long.parseLong(dotenv.get("GOOGLE_ADS_MCC_CUSTOMER_ID", "9335572227"));

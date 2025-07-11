@@ -61,6 +61,44 @@
             <version>${google.oauth.version}</version>
         </dependency>
 
+        <!-- Bing Ads API dependencies -->
+        <dependency>
+            <groupId>com.microsoft.bingads</groupId>
+            <artifactId>microsoft.bingads</artifactId>
+            <version>13.0.24.3</version>
+        </dependency>
+
+        <!-- JAX-WS dependencies required for Bing Ads API on Java 11+ -->
+        <dependency>
+            <groupId>javax.xml.ws</groupId>
+            <artifactId>jaxws-api</artifactId>
+            <version>2.3.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.sun.xml.ws</groupId>
+            <artifactId>jaxws-rt</artifactId>
+            <version>2.3.5</version>
+        </dependency>
+
+        <dependency>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
+            <version>2.3.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+            <version>2.3.8</version>
+        </dependency>
+
+        <dependency>
+            <groupId>javax.activation</groupId>
+            <artifactId>javax.activation-api</artifactId>
+            <version>1.2.0</version>
+        </dependency>
+
         <!-- Dotenv for environment variable management -->
         <dependency>
             <groupId>io.github.cdimascio</groupId>
