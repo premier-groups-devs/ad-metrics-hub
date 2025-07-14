@@ -42,6 +42,7 @@ public class BingAdsApiCampaigns {
         downloadCampaignPerformanceReport(
                 authorizationData,
                 "src/main/resources/",
+                ReportTimePeriod.THIS_MONTH,
                 "campaigns.csv"
         );
 
@@ -97,16 +98,12 @@ public class BingAdsApiCampaigns {
     }
 
     /**
-     * Downloads a Campaign Performance report (THIS_MONTH) as a CSV file.
-     *
-     * @param authorizationData an initialized AuthorizationData containing
-     *                          Authentication, DeveloperToken, CustomerId, AccountId
-     * @param outputDir         local directory where the file will be saved
-     * @param fileName          name for the downloaded CSV file (e.g. "campaigns.csv")
+     * Downloads a Campaign Performance Report for the requested time period and saves it to the specified directory.
      */
     public static void downloadCampaignPerformanceReport(
             AuthorizationData authorizationData,
             String outputDir,
+            ReportTimePeriod reportTimePeriod,
             String fileName) throws ExecutionException, InterruptedException {
 
         // 1) Initialize the ReportingServiceManager with your auth data
@@ -129,16 +126,17 @@ public class BingAdsApiCampaigns {
         scope.setAccountIds(accountIds);
         reportRequest.setScope(scope);
 
-        // Time: predefined THIS_MONTH
+        // Time: predefined
         // 1. Create a ReportTime container
         ReportTime time = new ReportTime();
-        time.setPredefinedTime(ReportTimePeriod.THIS_MONTH);
+        time.setPredefinedTime(reportTimePeriod);
         reportRequest.setTime(time);
 
 
         // Columns to include
         ArrayOfCampaignPerformanceReportColumn cols = new ArrayOfCampaignPerformanceReportColumn();
         cols.getCampaignPerformanceReportColumns().addAll(Arrays.asList(
+                CampaignPerformanceReportColumn.TIME_PERIOD,
                 CampaignPerformanceReportColumn.CAMPAIGN_NAME,
                 CampaignPerformanceReportColumn.IMPRESSIONS,
                 CampaignPerformanceReportColumn.CLICKS,

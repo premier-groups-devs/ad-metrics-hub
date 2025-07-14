@@ -9,6 +9,7 @@ import com.google.ads.googleads.v20.services.SearchGoogleAdsStreamRequest;
 import com.google.ads.googleads.v20.services.SearchGoogleAdsStreamResponse;
 import com.google.api.gax.rpc.ServerStream;
 import com.google.auth.oauth2.ServiceAccountCredentials;
+import com.premiergroup.ad_metrics_hub.enums.DateFilter;
 import io.github.cdimascio.dotenv.Dotenv;
 
 import java.io.FileInputStream;
@@ -112,10 +113,11 @@ public class GoogleAdsAPICampaigns {
 
                     System.out.println("==================================================");
                     System.out.println("📊 Account Name: " + accountName);
+                    System.out.println("• Account ID: " + accountId);   // 3034914162
                     System.out.println("==================================================");
 
                     // Consulta el rendimiento de las campañas para esta cuenta
-                    reportCampaignPerformance(googleAdsClient, accountId);
+                    reportCampaignPerformance(googleAdsClient, accountId, DateFilter.THIS_MONTH);
                     System.out.println("\n\n");
                 }
             }
@@ -128,11 +130,8 @@ public class GoogleAdsAPICampaigns {
 
     /**
      * Reporta el rendimiento de las campañas para una cuenta específica.
-     *
-     * @param googleAdsClient el cliente de Google Ads API
-     * @param customerId      el ID de cliente a consultar
      */
-    private void reportCampaignPerformance(GoogleAdsClient googleAdsClient, long customerId) {
+    private void reportCampaignPerformance(GoogleAdsClient googleAdsClient, long customerId, DateFilter filterDateEnum) {
         try (GoogleAdsServiceClient googleAdsServiceClient =
                      googleAdsClient.getLatestVersion().createGoogleAdsServiceClient()) {
 
@@ -145,14 +144,17 @@ public class GoogleAdsAPICampaigns {
             String endDate = today.format(formatter);
 
             // Construir la consulta GAQL para obtener el rendimiento de las campañas
-            String query = "SELECT campaign.id, campaign.name, campaign.status, "
-                    + "metrics.clicks, metrics.impressions, metrics.cost_micros, metrics.ctr, "
-                    + "metrics.average_cpc, metrics.conversions, "
-                    + "metrics.cost_per_conversion, metrics.all_conversions, "
-                    + "metrics.all_conversions_value, metrics.value_per_conversion "
-                    + "FROM campaign "
-                    + "WHERE campaign.status = 'ENABLED' "
-                    + "AND segments.date BETWEEN '" + startDate + "' AND '" + endDate + "'";
+            String query =
+                    "SELECT campaign.id, campaign.name, campaign.status, "
+                            + "segments.date, "                                // ← include the daily segment
+                            + "metrics.clicks, metrics.impressions, metrics.cost_micros, "
+                            + "metrics.ctr, metrics.average_cpc, metrics.conversions, "
+                            + "metrics.cost_per_conversion, metrics.all_conversions, "
+                            + "metrics.all_conversions_value, metrics.value_per_conversion "
+                            + "FROM campaign "
+                            + "WHERE campaign.status = 'ENABLED' "
+                            + "AND segments.date DURING " + filterDateEnum
+                            + " ORDER BY segments.date"; //, metrics.cost_micros DESC";  // ← sort by date
 
             // Construir la solicitud
             SearchGoogleAdsStreamRequest request =
@@ -171,13 +173,14 @@ public class GoogleAdsAPICampaigns {
                 rows.addAll(response.getResultsList());
             }
 
-            // Ordenar por costo descendente
-            rows.sort((row1, row2) -> Long.compare(row2.getMetrics().getCostMicros(),
-                    row1.getMetrics().getCostMicros()));
+//            // Ordenar por costo descendente
+//            rows.sort((row1, row2) -> Long.compare(row2.getMetrics().getCostMicros(),
+//                    row1.getMetrics().getCostMicros()));
 
             // Mostrar los resultados
             for (int i = 0; i < rows.size(); i++) {
                 GoogleAdsRow row = rows.get(i);
+                String date = row.getSegments().getDate();  // e.g. "2025-07-14"
 
                 long campaignId = row.getCampaign().getId();
                 String name = row.getCampaign().getName();
@@ -201,6 +204,7 @@ public class GoogleAdsAPICampaigns {
                 String roas = cost > 0 ? String.format("%.2f", allConvValue / cost) : "N/A";
 
                 System.out.println("--------------------------------------------------");
+                System.out.println("📅 Date       : " + date);
                 System.out.println("📌 Campaign " + (i + 1) + ": " + name);
                 System.out.println("• Campaign ID        : " + campaignId);
                 System.out.println("• Status             : " + status);
