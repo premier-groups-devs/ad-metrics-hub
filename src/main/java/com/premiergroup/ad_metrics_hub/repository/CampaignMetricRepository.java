@@ -7,11 +7,6 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface CampaignMetricRepository extends JpaRepository<CampaignMetric, Integer> {
-    List<CampaignMetric> findByCampaignIdAndStatsDateBetween(
-            Integer campaignId,
-            LocalDate start,
-            LocalDate end
-    );
 
     List<CampaignMetric> findByCampaign_MarketingChannel_IdAndStatsDateBetween(
             Integer marketingChannelsId,

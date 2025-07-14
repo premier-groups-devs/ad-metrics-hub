@@ -25,7 +25,7 @@ public class Campaign {
     private MarketingChannel marketingChannel;
 
     @Column(name = "campaign_id", nullable = false)
-    private Integer campaignId;
+    private String campaignId;
 
     private String name;
     private String status;

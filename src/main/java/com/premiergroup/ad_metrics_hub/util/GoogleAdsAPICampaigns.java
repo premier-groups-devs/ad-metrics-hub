@@ -1,4 +1,4 @@
-package com.premiergroup.ad_metrics_hub;
+package com.premiergroup.ad_metrics_hub.util;
 
 import com.google.ads.googleads.lib.GoogleAdsClient;
 import com.google.ads.googleads.v20.errors.GoogleAdsError;
@@ -116,8 +116,10 @@ public class GoogleAdsAPICampaigns {
                     System.out.println("• Account ID: " + accountId);   // 3034914162
                     System.out.println("==================================================");
 
+                    listAllCampaigns(googleAdsClient, accountId);
+
                     // Consulta el rendimiento de las campañas para esta cuenta
-                    reportCampaignPerformance(googleAdsClient, accountId, DateFilter.THIS_MONTH);
+                    reportCampaignPerformance(googleAdsClient, accountId);
                     System.out.println("\n\n");
                 }
             }
@@ -138,10 +140,6 @@ public class GoogleAdsAPICampaigns {
             // Obtener el primer y último día del mes actual
             LocalDate today = LocalDate.now();
             LocalDate firstDayOfMonth = today.withDayOfMonth(1);
-
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-            String startDate = firstDayOfMonth.format(formatter);
-            String endDate = today.format(formatter);
 
             // Construir la consulta GAQL para obtener el rendimiento de las campañas
             String query =
@@ -231,6 +229,142 @@ public class GoogleAdsAPICampaigns {
             for (GoogleAdsError error : gae.getGoogleAdsFailure().getErrorsList()) {
                 System.err.println("  - " + error.getMessage());
             }
+        }
+    }
+
+    private void reportCampaignPerformance(GoogleAdsClient client, long customerId) {
+        // Step 1: Determine the first day we have data for.
+        LocalDate startDate = getFirstStatDate(client, customerId);
+        LocalDate endDate = LocalDate.now();
+//        LocalDate endDate = LocalDate.now().minusDays(1);
+
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        String start = startDate.format(fmt);
+        String end = endDate.format(fmt);
+
+        String query =
+                "SELECT campaign.id, campaign.name, campaign.status, segments.date, " +
+                        "metrics.clicks, metrics.impressions, metrics.cost_micros, metrics.ctr, " +
+                        "metrics.average_cpc, metrics.conversions, metrics.cost_per_conversion, " +
+                        "metrics.all_conversions, metrics.all_conversions_value, metrics.value_per_conversion " +
+                        "FROM campaign " +
+                        "WHERE campaign.status = 'ENABLED' " +
+                        "  AND segments.date BETWEEN '" + start + "' AND '" + end + "' " +
+                        "ORDER BY segments.date";
+
+        try (GoogleAdsServiceClient service =
+                     client.getLatestVersion().createGoogleAdsServiceClient()) {
+
+            SearchGoogleAdsStreamRequest statsRequest =
+                    SearchGoogleAdsStreamRequest.newBuilder()
+                            .setCustomerId(Long.toString(customerId))
+                            .setQuery(query)
+                            .build();
+
+            ServerStream<SearchGoogleAdsStreamResponse> statsStream =
+                    service.searchStreamCallable().call(statsRequest);
+
+            List<GoogleAdsRow> rows = new ArrayList<>();
+            for (SearchGoogleAdsStreamResponse resp : statsStream) {
+                rows.addAll(resp.getResultsList());
+            }
+
+            for (GoogleAdsRow row : rows) {
+                String date = row.getSegments().getDate();
+                // ... (print metrics as before) ...
+                System.out.printf("%s: Campaign %s — clicks=%d, impressions=%d, cost=%.2f%n",
+                        date,
+                        row.getCampaign().getName(),
+                        row.getMetrics().getClicks(),
+                        row.getMetrics().getImpressions(),
+                        row.getMetrics().getCostMicros() / 1_000_000.0);
+
+            }
+            System.out.println("Total rows: " + rows.size());
+        } catch (GoogleAdsException gae) {
+            System.err.printf("Error stats for %d: %s%n", customerId, gae.getMessage());
+        }
+    }
+
+    /**
+     * Runs a streaming GAQL query sorted by date ascending and returns the first date we
+     * see. If no data is found, defaults to today.
+     */
+    private LocalDate getFirstStatDate(GoogleAdsClient client, long customerId) {
+        LocalDate today = LocalDate.now();
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+        String startSentinel = "2000-01-01";              // far before any real data
+        String endDate = today.format(fmt);
+
+        String q = "SELECT segments.date "
+                + "FROM campaign "
+                + "WHERE campaign.status = 'ENABLED' "
+                + "  AND segments.date BETWEEN '"
+                + startSentinel + "' AND '"
+                + endDate + "' "
+                + "ORDER BY segments.date ASC "
+                + "LIMIT 1";
+
+        try (GoogleAdsServiceClient service =
+                     client.getLatestVersion().createGoogleAdsServiceClient()) {
+
+            SearchGoogleAdsStreamRequest req =
+                    SearchGoogleAdsStreamRequest.newBuilder()
+                            .setCustomerId(Long.toString(customerId))
+                            .setQuery(q)
+                            .build();
+
+            for (SearchGoogleAdsStreamResponse resp :
+                    service.searchStreamCallable().call(req)) {
+                for (GoogleAdsRow row : resp.getResultsList()) {
+                    return LocalDate.parse(row.getSegments().getDate());
+                }
+            }
+        } catch (GoogleAdsException ex) {
+            System.err.println("Warning: couldn’t fetch first stat date: " + ex.getMessage());
+        }
+        return today;
+    }
+
+    /**
+     * Lists all the campaigns in the specified account.
+     *
+     * @param client      your GoogleAdsClient
+     * @param customerId  the Google Ads customer ID to query
+     */
+    private void listAllCampaigns(GoogleAdsClient client, long customerId) {
+        // GAQL to fetch every campaign (regardless of status)
+        String query =
+                "SELECT campaign.id, campaign.name, campaign.status " +
+                        "FROM campaign " +
+                        "ORDER BY campaign.id";
+
+        try (GoogleAdsServiceClient service =
+                     client.getLatestVersion().createGoogleAdsServiceClient()) {
+
+            SearchGoogleAdsStreamRequest request =
+                    SearchGoogleAdsStreamRequest.newBuilder()
+                            .setCustomerId(Long.toString(customerId))
+                            .setQuery(query)
+                            .build();
+
+            ServerStream<SearchGoogleAdsStreamResponse> stream =
+                    service.searchStreamCallable().call(request);
+
+            System.out.printf("Campaigns for customer %d:%n", customerId);
+            for (SearchGoogleAdsStreamResponse response : stream) {
+                for (GoogleAdsRow row : response.getResultsList()) {
+                    long id       = row.getCampaign().getId();
+                    String name   = row.getCampaign().getName();
+                    String status = row.getCampaign().getStatus().name();
+                    System.out.printf("  • ID: %d, Name: %s, Status: %s%n",
+                            id, name, status);
+                }
+            }
+        } catch (GoogleAdsException gae) {
+            System.err.printf("Failed to list campaigns for %d: %s%n",
+                    customerId, gae.getMessage());
         }
     }
 }

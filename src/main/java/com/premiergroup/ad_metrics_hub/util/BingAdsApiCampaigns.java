@@ -1,9 +1,11 @@
-package com.premiergroup.ad_metrics_hub;
+package com.premiergroup.ad_metrics_hub.util;
 
 import com.microsoft.bingads.ApiEnvironment;
 import com.microsoft.bingads.AuthorizationData;
 import com.microsoft.bingads.OAuthWebAuthCodeGrant;
 import com.microsoft.bingads.ServiceClient;
+import com.microsoft.bingads.v13.campaignmanagement.*;
+import com.microsoft.bingads.v13.campaignmanagement.ApiFaultDetail_Exception;
 import com.microsoft.bingads.v13.customermanagement.*;
 import com.microsoft.bingads.v13.customermanagement.AdApiFaultDetail_Exception;
 import com.microsoft.bingads.v13.reporting.*;
@@ -14,7 +16,9 @@ import lombok.extern.log4j.Log4j2;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -31,7 +35,7 @@ public class BingAdsApiCampaigns {
     private static final long ACCOUNT_ID = Long.parseLong(dotenv.get("BINGADS_ACCOUNT_ID"));
     private static final long CUSTOMER_ID = Long.parseLong(dotenv.get("BINGADS_CUSTOMER_ID"));
 
-    public static void main(String[] args) throws ExecutionException, InterruptedException {
+    public static void main(String[] args) throws ExecutionException, InterruptedException, ApiFaultDetail_Exception, com.microsoft.bingads.v13.campaignmanagement.AdApiFaultDetail_Exception {
 
         System.out.println("=== Bing Ads API ===\n");
 
@@ -39,13 +43,17 @@ public class BingAdsApiCampaigns {
         AuthorizationData authorizationData = getAuthorizationData();
         //User user = getUserDetails(authorizationData);
 
-        downloadCampaignPerformanceReport(
-                authorizationData,
-                "src/main/resources/",
-                ReportTimePeriod.THIS_MONTH,
-                "campaigns.csv"
+        List<Campaign> campaigns = getAllCampaigns(authorizationData);
+        campaigns.forEach(c ->
+                System.out.printf("ID: %d, Name: %s, Status: %s%n",
+                        c.getId(), c.getName(), c.getStatus())
         );
 
+        LocalDate earliest = LocalDate.of(2000, 1, 1);
+        LocalDate today = LocalDate.now();
+        getStatsCampaignWithDateRange(authorizationData, "src/main/resources/", earliest, today, "campaigns.csv");
+
+//        getStatsCampaignWithReportTimePeriod(authorizationData, "src/main/resources/", ReportTimePeriod.THIS_MONTH, "campaigns.csv");
     }
 
     private static AuthorizationData getAuthorizationData() {
@@ -77,7 +85,7 @@ public class BingAdsApiCampaigns {
                     authorizationData,
                     ICustomerManagementService.class);
 
-            java.lang.Long userId = null;
+            Long userId = null;
             final GetUserRequest getUserRequest = new GetUserRequest();
             getUserRequest.setUserId(userId);
             // If you updated the authorization data such as account ID or you want to call a new operation,
@@ -100,7 +108,7 @@ public class BingAdsApiCampaigns {
     /**
      * Downloads a Campaign Performance Report for the requested time period and saves it to the specified directory.
      */
-    public static void downloadCampaignPerformanceReport(
+    public static void getStatsCampaignWithReportTimePeriod(
             AuthorizationData authorizationData,
             String outputDir,
             ReportTimePeriod reportTimePeriod,
@@ -119,7 +127,7 @@ public class BingAdsApiCampaigns {
         AccountThroughCampaignReportScope scope = new AccountThroughCampaignReportScope();
 
         // Create and populate the ArrayOflong
-        com.microsoft.bingads.v13.reporting.ArrayOflong accountIds = new ArrayOflong();
+        ArrayOflong accountIds = new ArrayOflong();
         accountIds.getLongs().add(authorizationData.getAccountId());
 
         // Attach it to the scope
@@ -160,5 +168,91 @@ public class BingAdsApiCampaigns {
         File reportFile = downloadFuture.get();
 
         log.info("✅ Report saved to: {}", reportFile.getAbsolutePath());
+    }
+
+    /**
+     * Downloads a Campaign Performance Report for the requested time period and saves it to the specified directory.
+     */
+    public static void getStatsCampaignWithDateRange(
+            AuthorizationData authData,
+            String outputDir,
+            LocalDate customStart,
+            LocalDate customEnd,
+            String fileName) throws ExecutionException, InterruptedException {
+
+        ReportingServiceManager mgr = new ReportingServiceManager(authData, ApiEnvironment.PRODUCTION);
+
+        CampaignPerformanceReportRequest req = new CampaignPerformanceReportRequest();
+        req.setFormat(ReportFormat.CSV);
+        req.setReportName("AllCampaignStats");
+        req.setAggregation(ReportAggregation.DAILY);
+
+        // Scope: your account
+        AccountThroughCampaignReportScope scope = new AccountThroughCampaignReportScope();
+        ArrayOflong acctIds = new ArrayOflong();
+        acctIds.getLongs().add(authData.getAccountId());
+        scope.setAccountIds(acctIds);
+        req.setScope(scope);
+
+        // Custom date range
+        ReportTime time = new ReportTime();
+        com.microsoft.bingads.v13.reporting.Date start = new com.microsoft.bingads.v13.reporting.Date();
+        start.setDay(customStart.getDayOfMonth());
+        start.setMonth(customStart.getMonthValue());
+        start.setYear(customStart.getYear());
+        com.microsoft.bingads.v13.reporting.Date end = new com.microsoft.bingads.v13.reporting.Date();
+        end.setDay(customEnd.getDayOfMonth());
+        end.setMonth(customEnd.getMonthValue());
+        end.setYear(customEnd.getYear());
+        time.setCustomDateRangeStart(start);
+        time.setCustomDateRangeEnd(end);
+        req.setTime(time);
+
+        // Columns…
+        ArrayOfCampaignPerformanceReportColumn cols = new ArrayOfCampaignPerformanceReportColumn();
+        cols.getCampaignPerformanceReportColumns().addAll(Arrays.asList(
+                CampaignPerformanceReportColumn.TIME_PERIOD,
+                CampaignPerformanceReportColumn.CAMPAIGN_NAME,
+                CampaignPerformanceReportColumn.IMPRESSIONS,
+                CampaignPerformanceReportColumn.CLICKS,
+                CampaignPerformanceReportColumn.SPEND,
+                CampaignPerformanceReportColumn.CTR,
+                CampaignPerformanceReportColumn.AVERAGE_CPC,
+                CampaignPerformanceReportColumn.CONVERSIONS,
+                CampaignPerformanceReportColumn.CONVERSION_RATE
+        ));
+        req.setColumns(cols);
+
+        ReportingDownloadParameters dl = new ReportingDownloadParameters();
+        dl.setReportRequest(req);
+        dl.setResultFileDirectory(new File(outputDir));
+        dl.setResultFileName(fileName);
+        dl.setOverwriteResultFile(true);
+
+        Future<File> future = mgr.downloadFileAsync(dl, null);
+        File csv = future.get();
+        log.info("✅ Full-history report saved to: {}", csv.getAbsolutePath());
+    }
+
+    /**
+     * Returns all campaigns for the configured account.
+     */
+    private static List<Campaign> getAllCampaigns(AuthorizationData authorizationData) throws ApiFaultDetail_Exception, com.microsoft.bingads.v13.campaignmanagement.AdApiFaultDetail_Exception {
+        // Create a Campaign Management service client
+        ServiceClient<ICampaignManagementService> campaignService =
+                new ServiceClient<>(authorizationData, ICampaignManagementService.class);
+
+        // Build the request
+        GetCampaignsByAccountIdRequest request = new GetCampaignsByAccountIdRequest();
+        request.setAccountId(authorizationData.getAccountId());
+        // You can filter by type; here we grab search & content campaigns
+        request.setCampaignType(Arrays.asList(CampaignType.SEARCH, CampaignType.DYNAMIC_SEARCH_ADS));
+
+        // Call the service
+        GetCampaignsByAccountIdResponse response =
+                campaignService.getService().getCampaignsByAccountId(request);
+
+        // Unwrap and return the list
+        return response.getCampaigns().getCampaigns();
     }
 }
