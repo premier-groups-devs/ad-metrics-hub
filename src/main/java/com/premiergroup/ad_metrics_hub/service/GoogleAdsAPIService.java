@@ -6,6 +6,7 @@ import com.google.ads.googleads.v20.services.GoogleAdsRow;
 import com.google.ads.googleads.v20.services.GoogleAdsServiceClient;
 import com.google.ads.googleads.v20.services.SearchGoogleAdsStreamRequest;
 import com.google.ads.googleads.v20.services.SearchGoogleAdsStreamResponse;
+import com.premiergroup.ad_metrics_hub.config.GoogleAdsConfig;
 import com.premiergroup.ad_metrics_hub.entity.Campaign;
 import com.premiergroup.ad_metrics_hub.entity.CampaignMetric;
 import com.premiergroup.ad_metrics_hub.entity.MarketingChannel;
@@ -15,6 +16,7 @@ import com.premiergroup.ad_metrics_hub.repository.MarketingChannelRepository;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -33,6 +35,34 @@ public class GoogleAdsAPIService {
     private final CampaignMetricRepository metricRepository;
     private final MarketingChannelRepository channelRepository;
     private final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    /**
+     * Every day at 1 AM, fetch yesterday's stats for all campaigns
+     * under the given marketing channel and persist them.
+     */
+    @Scheduled(cron = "0 0 1 * * *")
+    @Transactional
+    public void dailyGoogleAdsStats() {
+        long customerId = GoogleAdsConfig.CUSTOMER_ID;
+        Integer marketingChannelId = 1;
+        LocalDate yesterday = LocalDate.now().minusDays(1);
+
+        log.info("Starting scheduled Google Ads sync for date {}", yesterday);
+        // load the channel
+        MarketingChannel channel = channelRepository.findById(marketingChannelId)
+                .orElseThrow(() ->
+                        new IllegalStateException("MarketingChannel not found: " + marketingChannelId)
+                );
+
+        // ensure campaigns are up to date
+        List<Campaign> campaigns = listAndSaveCampaigns(customerId, channel);
+
+        // fetch & save metrics for *only* yesterday
+        campaigns.forEach(c ->
+                saveMetrics(customerId, c, yesterday, yesterday)
+        );
+        log.info("Finished scheduled Google Ads sync for date {}", yesterday);
+    }
 
     @Transactional
     public void syncCampaignsAndMetrics(long customerId, Integer marketingChannelId) {

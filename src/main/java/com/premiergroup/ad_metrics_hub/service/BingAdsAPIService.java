@@ -112,6 +112,7 @@ public class BingAdsAPIService {
                             .findByMarketingChannel_IdAndCampaignId(channel.getId(), svcCampId)
                             .orElseThrow(() -> new IllegalStateException("Unknown campaign: " + svcCampId));
 
+                    //TODO found a way to get the value for: cost_per_conversion, conversion_value, value_per_conversion, roas
                     CampaignMetric metric = CampaignMetric.builder()
                             .campaign(camp)
                             .statsDate(date)

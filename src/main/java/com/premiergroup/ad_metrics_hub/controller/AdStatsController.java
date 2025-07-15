@@ -26,7 +26,7 @@ public class AdStatsController {
     private final BingAdsAPIService bingAdsAPIService;
 
     @GetMapping("/stats")
-    public ResponseEntity<List<CampaignMetric>> getStatsByMarketingChannelIdAndDateRange(
+    public ResponseEntity<Integer> getStatsByMarketingChannelIdAndDateRange(
             @RequestParam Integer marketingChannelId,
             @RequestParam DateFilter dateRange
     ) {
@@ -37,7 +37,7 @@ public class AdStatsController {
         if (campaignMetrics.isEmpty()) {
             return ResponseEntity.noContent().build();
         }
-        return ResponseEntity.ok(campaignMetrics);
+        return ResponseEntity.ok(campaignMetrics.size());
     }
 
     /**
