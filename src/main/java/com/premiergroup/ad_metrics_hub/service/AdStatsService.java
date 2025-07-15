@@ -23,12 +23,6 @@ public class AdStatsService {
                 dateRange.getStartDate(),
                 dateRange.getEndDate());
 
-//        // Process and save the fetched metrics
-//        for (CampaignMetric metric : campaignMetrics) {
-//            // Here you can add any processing logic if needed
-//            campaignMetricRepository.save(metric);
-//        }
-
         for (CampaignMetric metric : campaignMetrics) {
             log.info("Fetched CampaignMetric: {}", metric);
         }

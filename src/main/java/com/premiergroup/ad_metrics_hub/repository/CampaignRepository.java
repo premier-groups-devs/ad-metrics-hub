@@ -11,6 +11,4 @@ public interface CampaignRepository extends JpaRepository<Campaign, Integer> {
             Integer marketingChannelsId,
             String campaignId
     );
-
-
 }

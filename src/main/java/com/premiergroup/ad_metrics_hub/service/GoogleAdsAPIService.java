@@ -20,9 +20,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 @Service
 @Log4j2
@@ -78,9 +76,7 @@ public class GoogleAdsAPIService {
                             .status(row.getCampaign().getStatus().name())
                             .build());
 
-                    log.debug("Saving Campaign: {}", camp);
                     persisted.add(campaignRepository.save(camp));
-                    persisted.add(camp);
                 }
             }
         } catch (GoogleAdsException e) {
@@ -157,7 +153,6 @@ public class GoogleAdsAPIService {
                                     ) : BigDecimal.ZERO
                             )
                             .build();
-                    log.debug("Saving CampaignMetric: {}", cm);
                     metrics.add(cm);
                 }
             }

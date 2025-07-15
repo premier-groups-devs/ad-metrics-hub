@@ -16,7 +16,7 @@ public class GoogleAdsConfig {
     private static final String DEVELOPER_TOKEN = AdMetricsHubApplication.dotenv.get("GOOGLE_ADS_DEVELOPER_TOKEN");
     private static final String CREDENTIALS_PATH = AdMetricsHubApplication.dotenv.get("GOOGLE_CREDENTIALS_PATH");
     private static final long MCC_CUSTOMER_ID = Long.parseLong(AdMetricsHubApplication.dotenv.get("GOOGLE_ADS_MCC_CUSTOMER_ID"));
-
+    public static final long CUSTOMER_ID = Long.parseLong(AdMetricsHubApplication.dotenv.get("GOOGLE_ADS_CUSTOMER_ID"));
 
     @Bean
     public GoogleAdsClient getGoogleAdsClientWithServiceAccount() throws IOException {
