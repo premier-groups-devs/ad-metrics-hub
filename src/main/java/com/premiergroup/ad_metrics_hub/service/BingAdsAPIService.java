@@ -16,6 +16,7 @@ import com.premiergroup.ad_metrics_hub.repository.CampaignRepository;
 import com.premiergroup.ad_metrics_hub.repository.MarketingChannelRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,26 @@ public class BingAdsAPIService {
     private final CampaignRepository campaignRepository;
     private final CampaignMetricRepository metricRepository;
     private final MarketingChannelRepository channelRepository;
+
+    /**
+     * Runs every day at 2:10 AM to sync Bing Ads campaigns and metrics.
+     */
+    @Scheduled(cron = "0 10 2 * * ?")
+    public void dailyBingAdsSync() {
+        LocalDate yesterday = LocalDate.now().minusDays(1);
+        int marketingChannelId = 5;                     //Bing Ads channel ID
+
+        try {
+            log.info("Starting daily Bing Ads sync for date {}", yesterday);
+            // Ensure campaigns are up to date
+            syncCampaigns(marketingChannelId);
+            // Fetch only yesterday's metrics
+            syncMetricsForDate(marketingChannelId, yesterday, yesterday);
+            log.info("Finished daily Bing Ads sync for date {}", yesterday);
+        } catch (Exception ex) {
+            log.error("Error during scheduled Bing Ads sync for date {}", yesterday, ex);
+        }
+    }
 
     /**
      * Fetches all campaigns from Bing Ads and persists or updates them in the DB.
@@ -68,67 +89,65 @@ public class BingAdsAPIService {
     /**
      * Downloads a full history campaign performance report, parses it, and saves metrics.
      */
+    public void syncAllMetrics(int marketingChannelId) throws ExecutionException, InterruptedException {
+        // Download report for entire range
+        LocalDate start = LocalDate.of(2000, 1, 1);
+        LocalDate end = LocalDate.now().minusDays(1);
+
+        //Additionally, call dailyBingAdsSync scheduled task for daily updates
+        syncMetricsForDate(marketingChannelId, start, end);
+    }
+
     @Transactional
-    public void syncMetrics(int marketingChannelId) throws ExecutionException, InterruptedException {
+    public void syncMetricsForDate(int marketingChannelId, LocalDate startDate, LocalDate endDate)
+            throws ExecutionException, InterruptedException {
         MarketingChannel channel = channelRepository.findById(marketingChannelId)
                 .orElseThrow(() -> new IllegalArgumentException("Channel not found: " + marketingChannelId));
 
-        // Download report for entire range
-        LocalDate start = LocalDate.of(2000, 1, 1);
-        LocalDate end = LocalDate.now();
-        File csv = downloadCampaignPerformanceReport(authorizationData, start, end);
+        File csv = downloadCampaignPerformanceReport(authorizationData, startDate, endDate);
 
-        // Parse CSV and save metrics
         try (Stream<String> lines = Files.lines(csv.toPath())) {
             lines.skip(11).forEach(line -> {
                 String[] cols = line.split(",");
-
-                if (cols.length == 9) {
-                    log.debug("Processing line: {}", line);
-
-                    LocalDate date = LocalDate.parse(cols[0].replace("\"", ""));
-                    String svcCampId = cols[1].replace("\"", "");
-                    int impressions = Integer.parseInt(cols[2].replace("\"", ""));
-                    int clicks = Integer.parseInt(cols[3].replace("\"", ""));
-                    BigDecimal spend = new BigDecimal(cols[4].replace("\"", ""));
-                    BigDecimal ctr = new BigDecimal((cols[5]
-                            .replace("\"", "")
-                            .replace("%", "")
-                            .trim().isEmpty()) ? "0" : cols[5]
-                            .replace("\"", "")
-                            .replace("%", "")
-                            .trim());
-                    BigDecimal avgCpc = new BigDecimal(cols[6].replace("\"", ""));
-                    int conversions = Integer.parseInt(cols[7].replace("\"", ""));
-                    BigDecimal convRate = new BigDecimal((cols[8]
-                            .replace("\"", "")
-                            .replace("%", "")
-                            .trim().isEmpty()) ? "0" : cols[8]
-                            .replace("\"", "")
-                            .replace("%", "")
-                            .trim());
-
-                    Campaign camp = campaignRepository
-                            .findByMarketingChannel_IdAndCampaignId(channel.getId(), svcCampId)
-                            .orElseThrow(() -> new IllegalStateException("Unknown campaign: " + svcCampId));
-
-                    //TODO found a way to get the value for: cost_per_conversion, conversion_value, value_per_conversion, roas
-                    CampaignMetric metric = CampaignMetric.builder()
-                            .campaign(camp)
-                            .statsDate(date)
-                            .impressions(impressions)
-                            .clicks(clicks)
-                            .cost(spend)
-                            .ctr(ctr)
-                            .avgCpc(avgCpc)
-                            .conversions(conversions)
-                            .conversionRate(convRate)
-                            .build();
-
-                    metricRepository.save(metric);
-                } else {
+                if (cols.length != 9) {
                     log.warn("Skipping malformed line: {}", line);
+                    return;
                 }
+
+                LocalDate statsDate = LocalDate.parse(cols[0].replace("\"", ""));
+                String svcCampId = cols[1].replace("\"", "");
+                int impressions = Integer.parseInt(cols[2].replace("\"", ""));
+                int clicks = Integer.parseInt(cols[3].replace("\"", ""));
+                BigDecimal spend = new BigDecimal(cols[4].replace("\"", ""));
+                BigDecimal ctr = new BigDecimal(
+                        cols[5].replace("\"", "").replace("%", "").trim().isEmpty()
+                                ? "0" : cols[5].replace("\"", "").replace("%", "").trim()
+                );
+                BigDecimal avgCpc = new BigDecimal(cols[6].replace("\"", ""));
+                int conversions = Integer.parseInt(cols[7].replace("\"", ""));
+                BigDecimal convRate = new BigDecimal(
+                        cols[8].replace("\"", "").replace("%", "").trim().isEmpty()
+                                ? "0" : cols[8].replace("\"", "").replace("%", "").trim()
+                );
+
+                Campaign camp = campaignRepository
+                        .findByMarketingChannel_IdAndCampaignId(channel.getId(), svcCampId)
+                        .orElseThrow(() -> new IllegalStateException("Unknown campaign: " + svcCampId));
+
+                //TODO found a way to get the value for: cost_per_conversion, conversion_value, value_per_conversion, roas
+                CampaignMetric metric = CampaignMetric.builder()
+                        .campaign(camp)
+                        .statsDate(statsDate)
+                        .impressions(impressions)
+                        .clicks(clicks)
+                        .cost(spend)
+                        .ctr(ctr)
+                        .avgCpc(avgCpc)
+                        .conversions(conversions)
+                        .conversionRate(convRate)
+                        .build();
+
+                metricRepository.save(metric);
             });
         } catch (IOException e) {
             throw new RuntimeException("Failed to parse report: " + csv.getAbsolutePath(), e);

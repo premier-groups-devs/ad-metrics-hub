@@ -29,7 +29,6 @@ import java.util.*;
 @AllArgsConstructor
 public class GoogleAdsAPIService {
 
-
     private final GoogleAdsClient googleAdsClient;
     private final CampaignRepository campaignRepository;
     private final CampaignMetricRepository metricRepository;
@@ -37,14 +36,14 @@ public class GoogleAdsAPIService {
     private final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     /**
-     * Every day at 1 AM, fetch yesterday's stats for all campaigns
+     * Every day at 2 AM, fetch yesterday's stats for all campaigns
      * under the given marketing channel and persist them.
      */
-    @Scheduled(cron = "0 0 1 * * *")
+    @Scheduled(cron = "0 0 2 * * *")
     @Transactional
-    public void dailyGoogleAdsStats() {
+    public void dailyGoogleAdsSync() {
         long customerId = GoogleAdsConfig.CUSTOMER_ID;
-        Integer marketingChannelId = 1;
+        Integer marketingChannelId = 1;                     //Google Ads channel ID
         LocalDate yesterday = LocalDate.now().minusDays(1);
 
         log.info("Starting scheduled Google Ads sync for date {}", yesterday);
@@ -72,8 +71,9 @@ public class GoogleAdsAPIService {
 
         List<Campaign> saved = listAndSaveCampaigns(customerId, channel);
         LocalDate start = getFirstStatDate(googleAdsClient, customerId);
-        LocalDate end = LocalDate.now();
+        LocalDate end = LocalDate.now().minusDays(1); // yesterday
 
+        //Additionally, call dailyGoogleAdsStats scheduled task for daily updates
         saved.forEach(campaign -> saveMetrics(customerId, campaign, start, end));
     }
 

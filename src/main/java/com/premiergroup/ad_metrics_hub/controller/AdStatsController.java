@@ -30,8 +30,8 @@ public class AdStatsController {
             @RequestParam Integer marketingChannelId,
             @RequestParam DateFilter dateRange
     ) {
-        //TODO MAKE SCHEDULED TASK TO FETCH STATS FROM THE API AND SAVE THEM IN THE DB
         //TODO MAKE DTO ACCORDING TO THE GRAPH IN THE FRONTEND
+        //TODO GET STATS FROM DEVICES
         List<CampaignMetric> campaignMetrics = adStatsService.getStatsByMarketingChannelIdAndDateRange(marketingChannelId, dateRange);
 
         if (campaignMetrics.isEmpty()) {
@@ -57,7 +57,7 @@ public class AdStatsController {
         } else if (5 == marketingChannelId) { //Bing Ads
 
             bingAdsAPIService.syncCampaigns(marketingChannelId);
-            bingAdsAPIService.syncMetrics(marketingChannelId);
+            bingAdsAPIService.syncAllMetrics(marketingChannelId);
         } else {
             return ResponseEntity.badRequest().build();
         }
