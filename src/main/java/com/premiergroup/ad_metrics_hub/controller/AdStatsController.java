@@ -3,7 +3,7 @@ package com.premiergroup.ad_metrics_hub.controller;
 import com.microsoft.bingads.v13.campaignmanagement.AdApiFaultDetail_Exception;
 import com.microsoft.bingads.v13.campaignmanagement.ApiFaultDetail_Exception;
 import com.premiergroup.ad_metrics_hub.config.GoogleAdsConfig;
-import com.premiergroup.ad_metrics_hub.entity.CampaignMetric;
+import com.premiergroup.ad_metrics_hub.dto.WidgetAdsStats;
 import com.premiergroup.ad_metrics_hub.enums.DateFilter;
 import com.premiergroup.ad_metrics_hub.service.AdStatsService;
 import com.premiergroup.ad_metrics_hub.service.BingAdsAPIService;
@@ -13,7 +13,6 @@ import lombok.AllArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 @RestController
@@ -26,18 +25,18 @@ public class AdStatsController {
     private final BingAdsAPIService bingAdsAPIService;
 
     @GetMapping("/stats")
-    public ResponseEntity<Integer> getStatsByMarketingChannelIdAndDateRange(
+    public ResponseEntity<WidgetAdsStats> getStatsByMarketingChannelIdAndDateRange(
             @RequestParam Integer marketingChannelId,
             @RequestParam DateFilter dateRange
     ) {
         //TODO MAKE DTO ACCORDING TO THE GRAPH IN THE FRONTEND
         //TODO GET STATS FROM DEVICES
-        List<CampaignMetric> campaignMetrics = adStatsService.getStatsByMarketingChannelIdAndDateRange(marketingChannelId, dateRange);
+        WidgetAdsStats widgetStats = adStatsService.getStatsByMarketingChannelIdAndDateRange(marketingChannelId, dateRange);
 
-        if (campaignMetrics.isEmpty()) {
+        if (widgetStats == null) {
             return ResponseEntity.noContent().build();
         }
-        return ResponseEntity.ok(campaignMetrics.size());
+        return ResponseEntity.ok(widgetStats);
     }
 
     /**
