@@ -17,6 +17,13 @@ public enum DateFilter {
     LAST_30_DAYS,
     LAST_90_DAYS;
 
+    public String getType() {
+        return switch (this) {
+            case LAST_YEAR, THIS_YEAR -> "MONTH";
+            default -> "DAY";
+        };
+    }
+
     public LocalDate getStartDate() {
         LocalDate today = LocalDate.now();
 
@@ -46,8 +53,7 @@ public enum DateFilter {
             case LAST_YEAR -> today.minusYears(1).with(TemporalAdjusters.lastDayOfYear());
             case THIS_YEAR -> today.with(TemporalAdjusters.lastDayOfYear());
             case YESTERDAY -> today.minusDays(1);
-            case TODAY -> today;
-            case LAST_7_DAYS, LAST_30_DAYS, LAST_90_DAYS -> today;
+            case LAST_7_DAYS, LAST_30_DAYS, LAST_90_DAYS, TODAY -> today;
         };
     }
 }
