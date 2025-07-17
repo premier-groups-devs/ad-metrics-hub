@@ -10,10 +10,10 @@ import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -26,7 +26,7 @@ import static java.time.temporal.ChronoUnit.DAYS;
 @AllArgsConstructor
 public class AdStatsService {
 
-    private final CampaignMetricRepository campaignMetricRepository;
+    private CampaignMetricRepository campaignMetricRepository;
 
     public WidgetAdsStats getStatsByMarketingChannelIdAndDateRange(
             Integer marketingChannelId,
@@ -34,162 +34,268 @@ public class AdStatsService {
     ) {
         LocalDate start = dateRange.getStartDate();
         LocalDate end = dateRange.getEndDate();
+        boolean isMonthlyGroup = "MONTH".equals(dateRange.getType());
 
-        // Fetch all metrics in the window
+        // 1) fetch all metrics in window
         List<CampaignMetric> currentMetrics = campaignMetricRepository
-                .findByCampaign_MarketingChannel_IdAndStatsDateBetween(marketingChannelId, start, end);
+                .findByCampaign_MarketingChannel_IdAndStatsDateBetween(
+                        marketingChannelId, start, end);
 
-        // Pick grouping function based on MONTH
-        if ("MONTH".equals(dateRange.getType())) {
-            // 1a) Group by YearMonth
-            Map<YearMonth, Integer> imprByMonth = currentMetrics.stream().collect(Collectors.groupingBy(
+        // 2) group either by day or by YearMonth
+        // — daily grouping —
+        Map<LocalDate, Integer> imprByDay = new TreeMap<>();
+        Map<LocalDate, Integer> clicksByDay = new TreeMap<>();
+        Map<LocalDate, Integer> convByDay = new TreeMap<>();
+        Map<LocalDate, BigDecimal> costByDay = new TreeMap<>();
+        for (var cm : currentMetrics) {
+            LocalDate d = cm.getStatsDate();
+            imprByDay.merge(d, cm.getImpressions(), Integer::sum);
+            clicksByDay.merge(d, cm.getClicks(), Integer::sum);
+            convByDay.merge(d, cm.getConversions(), Integer::sum);
+            costByDay.merge(d, cm.getCost(), BigDecimal::add);
+        }
+
+        // — monthly grouping (THIS_YEAR) —
+        Map<YearMonth, Integer> imprByMonth = null;
+        Map<YearMonth, Integer> clicksByMonth = null;
+        Map<YearMonth, Integer> convByMonth = null;
+        Map<YearMonth, BigDecimal> costByMonth = null;
+        if (isMonthlyGroup) {
+            imprByMonth = currentMetrics.stream().collect(Collectors.groupingBy(
                     cm -> YearMonth.from(cm.getStatsDate()),
                     TreeMap::new,
                     Collectors.summingInt(CampaignMetric::getImpressions)
             ));
-            Map<YearMonth, Integer> clicksByMonth = currentMetrics.stream().collect(Collectors.groupingBy(
+            clicksByMonth = currentMetrics.stream().collect(Collectors.groupingBy(
                     cm -> YearMonth.from(cm.getStatsDate()),
                     TreeMap::new,
                     Collectors.summingInt(CampaignMetric::getClicks)
             ));
-            Map<YearMonth, Integer> convByMonth = currentMetrics.stream().collect(Collectors.groupingBy(
+            convByMonth = currentMetrics.stream().collect(Collectors.groupingBy(
                     cm -> YearMonth.from(cm.getStatsDate()),
                     TreeMap::new,
                     Collectors.summingInt(CampaignMetric::getConversions)
             ));
-            Map<YearMonth, BigDecimal> costByMonth = currentMetrics.stream().collect(Collectors.groupingBy(
+            costByMonth = currentMetrics.stream().collect(Collectors.groupingBy(
                     cm -> YearMonth.from(cm.getStatsDate()),
                     TreeMap::new,
                     Collectors.reducing(BigDecimal.ZERO, CampaignMetric::getCost, BigDecimal::add)
             ));
-
-            // 2a) Build labels & values
-            List<String> labelsImpr = imprByMonth.keySet().stream().map(YearMonth::toString).toList();
-            List<String> labelsClicks = clicksByMonth.keySet().stream().map(YearMonth::toString).toList();
-            List<String> labelsConv = convByMonth.keySet().stream().map(YearMonth::toString).toList();
-            List<String> labelsCost = costByMonth.keySet().stream().map(YearMonth::toString).toList();
-
-            // 3a) Totals
-            int totalImpr = imprByMonth.values().stream().mapToInt(i -> i).sum();
-            int totalClicks = clicksByMonth.values().stream().mapToInt(i -> i).sum();
-            int totalConv = convByMonth.values().stream().mapToInt(i -> i).sum();
-            BigDecimal totalCost = costByMonth.values().stream()
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-            // 4a) Compute previous-year totals for % change
-            LocalDate prevStart = start.minusYears(1).withDayOfYear(1);
-            LocalDate prevEnd = prevStart.withDayOfYear(prevStart.lengthOfYear());
-            List<CampaignMetric> prevMetrics = campaignMetricRepository
-                    .findByCampaign_MarketingChannel_IdAndStatsDateBetween(marketingChannelId, prevStart, prevEnd);
-            int prevImpr = prevMetrics.stream().mapToInt(CampaignMetric::getImpressions).sum();
-            int prevClicks = prevMetrics.stream().mapToInt(CampaignMetric::getClicks).sum();
-            int prevConv = prevMetrics.stream().mapToInt(CampaignMetric::getConversions).sum();
-            BigDecimal prevCost = prevMetrics.stream()
-                    .map(CampaignMetric::getCost)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-            // 5a) Build MetricStats
-            MetricStats<Integer> imprStats = new MetricStats<>(labelsImpr, imprByMonth.values(), totalImpr, percentChange(totalImpr, prevImpr));
-            MetricStats<Integer> clicksStats = new MetricStats<>(labelsClicks, clicksByMonth.values(), totalClicks, percentChange(totalClicks, prevClicks));
-            MetricStats<Integer> convStats = new MetricStats<>(labelsConv, convByMonth.values(), totalConv, percentChange(totalConv, prevConv));
-            MetricStats<BigDecimal> costStats = new MetricStats<>(labelsCost, costByMonth.values(), totalCost, percentChange(totalCost, prevCost));
-
-            return new WidgetAdsStats(imprStats, clicksStats, convStats, costStats);
         }
 
-        // DAY grouping
-        Map<LocalDate, Integer> sumImpr = new TreeMap<>();
-        Map<LocalDate, Integer> sumClicks = new TreeMap<>();
-        Map<LocalDate, Integer> sumConv = new TreeMap<>();
-        Map<LocalDate, BigDecimal> sumCost = new TreeMap<>();
+        // 3) compute current‐period totals
+        int totalImpr = (isMonthlyGroup
+                ? imprByMonth.values().stream().mapToInt(i -> i).sum()
+                : imprByDay.values().stream().mapToInt(i -> i).sum());
+        int totalClicks = (isMonthlyGroup
+                ? clicksByMonth.values().stream().mapToInt(i -> i).sum()
+                : clicksByDay.values().stream().mapToInt(i -> i).sum());
+        int totalConv = (isMonthlyGroup
+                ? convByMonth.values().stream().mapToInt(i -> i).sum()
+                : convByDay.values().stream().mapToInt(i -> i).sum());
+        BigDecimal totalCost = (isMonthlyGroup
+                ? costByMonth.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add)
+                : costByDay.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add));
 
-        for (var cm : currentMetrics) {
-            LocalDate d = cm.getStatsDate();
-            sumImpr.merge(d, cm.getImpressions(), Integer::sum);
-            sumClicks.merge(d, cm.getClicks(), Integer::sum);
-            sumConv.merge(d, cm.getConversions(), Integer::sum);
-            sumCost.merge(d, cm.getCost(), BigDecimal::add);
+        // 4) compute previous‐period window & totals
+        LocalDate prevStart, prevEnd;
+        if (isMonthlyGroup) {
+            prevStart = start.minusYears(1).withDayOfYear(1);
+            prevEnd = prevStart.withDayOfYear(prevStart.lengthOfYear());
+        } else {
+            long days = DAYS.between(start, end) + 1;
+            prevEnd = start.minusDays(1);
+            prevStart = prevEnd.minusDays(days - 1);
         }
-
-        //–– build labels, totals and % changes ––
-        MetricStats<Integer> imprStats = buildIntStats(sumImpr, start, end, marketingChannelId, DateFilterType.IMPRESSIONS);
-        MetricStats<Integer> clicksStats = buildIntStats(sumClicks, start, end, marketingChannelId, DateFilterType.CLICKS);
-        MetricStats<Integer> convStats = buildIntStats(sumConv, start, end, marketingChannelId, DateFilterType.CONVERSIONS);
-        MetricStats<BigDecimal> costStats = buildDecStats(sumCost, start, end, marketingChannelId);
-
-        return new WidgetAdsStats(imprStats, clicksStats, convStats, costStats);
-    }
-
-    // helper for Integer metrics
-    private MetricStats<Integer> buildIntStats(
-            Map<LocalDate, Integer> series,
-            LocalDate start, LocalDate end,
-            Integer channelId, DateFilterType type
-    ) {
-        List<String> labels = series.keySet().stream().map(LocalDate::toString).toList();
-        int total = series.values().stream().mapToInt(i -> i).sum();
-
-        // previous period sum
-        long days = DAYS.between(start, end) + 1;
-        LocalDate prevEnd = start.minusDays(1);
-        LocalDate prevStart = prevEnd.minusDays(days - 1);
         List<CampaignMetric> prevMetrics = campaignMetricRepository
-                .findByCampaign_MarketingChannel_IdAndStatsDateBetween(channelId, prevStart, prevEnd);
+                .findByCampaign_MarketingChannel_IdAndStatsDateBetween(
+                        marketingChannelId, prevStart, prevEnd);
 
-        int prevTotal = switch (type) {
-            case IMPRESSIONS -> prevMetrics.stream().mapToInt(CampaignMetric::getImpressions).sum();
-            case CLICKS -> prevMetrics.stream().mapToInt(CampaignMetric::getClicks).sum();
-            case CONVERSIONS -> prevMetrics.stream().mapToInt(CampaignMetric::getConversions).sum();
-        };
-
-        BigDecimal pct = percentChange(BigDecimal.valueOf(total), BigDecimal.valueOf(prevTotal));
-        return new MetricStats<>(labels, series.values(), total, pct);
-    }
-
-    // helper for BigDecimal “cost”
-    private MetricStats<BigDecimal> buildDecStats(
-            Map<LocalDate, BigDecimal> series,
-            LocalDate start, LocalDate end,
-            Integer channelId
-    ) {
-        List<String> labels = series.keySet().stream().map(LocalDate::toString).toList();
-        BigDecimal total = series.values().stream()
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        long days = DAYS.between(start, end) + 1;
-        LocalDate prevEnd = start.minusDays(1);
-        LocalDate prevStart = prevEnd.minusDays(days - 1);
-        List<CampaignMetric> prevMetrics = campaignMetricRepository
-                .findByCampaign_MarketingChannel_IdAndStatsDateBetween(channelId, prevStart, prevEnd);
-
-        BigDecimal prevTotal = prevMetrics.stream()
+        int prevImpr = prevMetrics.stream().mapToInt(CampaignMetric::getImpressions).sum();
+        int prevClicks = prevMetrics.stream().mapToInt(CampaignMetric::getClicks).sum();
+        int prevConv = prevMetrics.stream().mapToInt(CampaignMetric::getConversions).sum();
+        BigDecimal prevCost = prevMetrics.stream()
                 .map(CampaignMetric::getCost)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal pct = percentChange(total, prevTotal);
-        return new MetricStats<>(labels, series.values(), total, pct);
+        // 5) build the four core metrics
+        MetricStats<Integer> imprStats = buildIntStats(
+                isMonthlyGroup, imprByDay, imprByMonth, totalImpr, prevImpr);
+        MetricStats<Integer> clicksStats = buildIntStats(
+                isMonthlyGroup, clicksByDay, clicksByMonth, totalClicks, prevClicks);
+        MetricStats<Integer> convStats = buildIntStats(
+                isMonthlyGroup, convByDay, convByMonth, totalConv, prevConv);
+        MetricStats<BigDecimal> costStats = buildDecStats(
+                isMonthlyGroup, costByDay, costByMonth, totalCost, prevCost);
+
+        // 6) cost‐per‐conversion & conversion‐rate
+        MetricStats<BigDecimal> cpcStats = buildCostPerConversionStats(
+                isMonthlyGroup,
+                costByDay, costByMonth,
+                convByDay, convByMonth,
+                totalCost, totalConv,
+                prevCost, prevConv
+        );
+        MetricStats<BigDecimal> crStats = buildConversionRateStats(
+                isMonthlyGroup,
+                convByDay, convByMonth,
+                clicksByDay, clicksByMonth,
+                totalConv, totalClicks,
+                prevConv, prevClicks
+        );
+
+        // 7) return the full dashboard DTO
+        return new WidgetAdsStats(
+                imprStats,
+                clicksStats,
+                convStats,
+                costStats,
+                cpcStats,
+                crStats
+        );
     }
 
-    private BigDecimal percentChange(Number current, Number previous) {
-        BigDecimal curr = toBigDecimal(current);
-        BigDecimal prev = toBigDecimal(previous);
+    // ——— helpers ———
+
+    private BigDecimal percentChange(BigDecimal curr, BigDecimal prev) {
         if (prev.compareTo(BigDecimal.ZERO) == 0) {
             return curr.compareTo(BigDecimal.ZERO) == 0
                     ? BigDecimal.ZERO
                     : BigDecimal.valueOf(100);
         }
-        return curr.subtract(prev)
+        return curr
+                .subtract(prev)
                 .divide(prev, 4, RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(100));
     }
 
-    private static BigDecimal toBigDecimal(Number n) {
-        if (n instanceof BigDecimal) return (BigDecimal) n;
-        if (n instanceof BigInteger) return new BigDecimal((BigInteger) n);
-        return BigDecimal.valueOf(n.doubleValue());
+    private MetricStats<Integer> buildIntStats(
+            boolean isYear,
+            Map<LocalDate, Integer> daily,
+            Map<YearMonth, Integer> monthly,
+            int total,
+            int prevTotal
+    ) {
+        // choose the right series & labels
+        List<String> labels = (isYear
+                ? monthly.keySet().stream().map(YearMonth::toString)
+                : daily.keySet().stream().map(LocalDate::toString)
+        ).toList();
+
+        Collection<Integer> values = (isYear
+                ? monthly.values()
+                : daily.values()
+        );
+
+        BigDecimal pct = percentChange(
+                BigDecimal.valueOf(total),
+                BigDecimal.valueOf(prevTotal)
+        );
+
+        return new MetricStats<>(labels, values, total, pct);
     }
 
-    // simple enum to pick which int-metric we’re doing
-    private enum DateFilterType {IMPRESSIONS, CLICKS, CONVERSIONS}
+    private MetricStats<BigDecimal> buildDecStats(
+            boolean isYear,
+            Map<LocalDate, BigDecimal> daily,
+            Map<YearMonth, BigDecimal> monthly,
+            BigDecimal total,
+            BigDecimal prevTotal
+    ) {
+        List<String> labels = (isYear
+                ? monthly.keySet().stream().map(YearMonth::toString)
+                : daily.keySet().stream().map(LocalDate::toString)
+        ).toList();
 
+        Collection<BigDecimal> values = (isYear
+                ? monthly.values()
+                : daily.values()
+        );
+
+        BigDecimal pct = percentChange(total, prevTotal);
+        return new MetricStats<>(labels, values, total, pct);
+    }
+
+    private MetricStats<BigDecimal> buildCostPerConversionStats(
+            boolean isYear,
+            Map<LocalDate, BigDecimal> dailyCost,
+            Map<YearMonth, BigDecimal> monthlyCost,
+            Map<LocalDate, Integer> dailyConv,
+            Map<YearMonth, Integer> monthlyConv,
+            BigDecimal totalCost,
+            int totalConv,
+            BigDecimal prevCost,
+            int prevConv
+    ) {
+        // pick source maps
+        Map<?, BigDecimal> costMap = isYear ? monthlyCost : dailyCost;
+        Map<?, Integer> convMap = isYear ? monthlyConv : dailyConv;
+
+        // compute per‐bucket series
+        Map<Object, BigDecimal> series = new TreeMap<>();
+        costMap.forEach((k, c) -> {
+            int conv = convMap.getOrDefault(k, 0);
+            if (conv > 0) {
+                series.put(k, c.divide(BigDecimal.valueOf(conv), 4, RoundingMode.HALF_UP));
+            }
+        });
+
+        List<String> labels = series.keySet().stream()
+                .map(Object::toString).toList();
+        Collection<BigDecimal> values = series.values();
+
+        BigDecimal avgThis = (totalConv > 0)
+                ? totalCost.divide(BigDecimal.valueOf(totalConv), 4, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+        BigDecimal avgPrev = (prevConv > 0)
+                ? prevCost.divide(BigDecimal.valueOf(prevConv), 4, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+        BigDecimal pct = percentChange(avgThis, avgPrev);
+
+        return new MetricStats<>(labels, values, avgThis, pct);
+    }
+
+    private MetricStats<BigDecimal> buildConversionRateStats(
+            boolean isYear,
+            Map<LocalDate, Integer> dailyConv,
+            Map<YearMonth, Integer> monthlyConv,
+            Map<LocalDate, Integer> dailyClicks,
+            Map<YearMonth, Integer> monthlyClicks,
+            int totalConv,
+            int totalClicks,
+            int prevConv,
+            int prevClicks
+    ) {
+        Map<?, Integer> convMap = isYear ? monthlyConv : dailyConv;
+        Map<?, Integer> clickMap = isYear ? monthlyClicks : dailyClicks;
+
+        Map<Object, BigDecimal> series = new TreeMap<>();
+        clickMap.forEach((k, clk) -> {
+            int conv = convMap.getOrDefault(k, 0);
+            if (clk > 0) {
+                BigDecimal rate = BigDecimal.valueOf(conv)
+                        .divide(BigDecimal.valueOf(clk), 4, RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(100));
+                series.put(k, rate);
+            }
+        });
+
+        List<String> labels = series.keySet().stream()
+                .map(Object::toString).toList();
+        Collection<BigDecimal> values = series.values();
+
+        BigDecimal rateThis = (totalClicks > 0)
+                ? BigDecimal.valueOf(totalConv)
+                .divide(BigDecimal.valueOf(totalClicks), 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                : BigDecimal.ZERO;
+        BigDecimal ratePrev = (prevClicks > 0)
+                ? BigDecimal.valueOf(prevConv)
+                .divide(BigDecimal.valueOf(prevClicks), 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                : BigDecimal.ZERO;
+        BigDecimal pct = percentChange(rateThis, ratePrev);
+
+        return new MetricStats<>(labels, values, rateThis, pct);
+    }
 }
