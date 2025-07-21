@@ -13,4 +13,11 @@ public interface CampaignMetricRepository extends JpaRepository<CampaignMetric, 
             LocalDate start,
             LocalDate end
     );
+
+    List<CampaignMetric> findByCampaign_MarketingChannel_IdAndCampaign_StatusInAndStatsDateBetween(
+            Integer marketingChannelId,
+            List<String> statuses,
+            LocalDate start,
+            LocalDate end
+    );
 }

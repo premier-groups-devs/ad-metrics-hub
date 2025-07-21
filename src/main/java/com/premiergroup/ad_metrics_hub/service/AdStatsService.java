@@ -1,9 +1,11 @@
 package com.premiergroup.ad_metrics_hub.service;
 
+import com.premiergroup.ad_metrics_hub.dto.CampaignAdsStats;
 import com.premiergroup.ad_metrics_hub.dto.MetricStats;
 import com.premiergroup.ad_metrics_hub.dto.WidgetAdsStats;
 import com.premiergroup.ad_metrics_hub.entity.CampaignMetric;
 import com.premiergroup.ad_metrics_hub.enums.DateFilter;
+import com.premiergroup.ad_metrics_hub.enums.MetricFilter;
 import com.premiergroup.ad_metrics_hub.repository.CampaignMetricRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -13,10 +15,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static java.time.temporal.ChronoUnit.DAYS;
@@ -28,7 +27,7 @@ public class AdStatsService {
 
     private CampaignMetricRepository campaignMetricRepository;
 
-    public WidgetAdsStats getStatsByMarketingChannelIdAndDateRange(
+    public WidgetAdsStats getSWidgetAdsStats(
             Integer marketingChannelId,
             DateFilter dateRange
     ) {
@@ -153,6 +152,74 @@ public class AdStatsService {
                 cpcStats,
                 crStats
         );
+    }
+
+    public CampaignAdsStats getCampaignAdsStats(
+            Integer marketingChannelId,
+            DateFilter dateRange,
+            MetricFilter metricFilter
+    ) {
+        LocalDate start = dateRange.getStartDate();
+        LocalDate end = dateRange.getEndDate();
+        boolean isMonthlyGroup = "MONTH".equals(dateRange.getType());
+
+        // 1) fetch all metrics in window
+        List<String> activeStatuses = Arrays.asList("ENABLED", "ACTIVE");
+        List<CampaignMetric> metrics = campaignMetricRepository
+                .findByCampaign_MarketingChannel_IdAndCampaign_StatusInAndStatsDateBetween(
+                        marketingChannelId,
+                        activeStatuses,
+                        start,
+                        end
+                );
+
+        // 2) build the list of labels (strings)
+        List<String> labels;
+        if (isMonthlyGroup) {
+            labels = metrics.stream()
+                    .map(cm -> YearMonth.from(cm.getStatsDate()))
+                    .distinct()
+                    .sorted()
+                    .map(YearMonth::toString)
+                    .toList();
+        } else {
+            labels = metrics.stream()
+                    .map(cm -> cm.getStatsDate().toString())
+                    .distinct()
+                    .sorted()
+                    .toList();
+        }
+
+        // 3) group metrics by campaign name and by period key
+        Map<String, Map<String, List<CampaignMetric>>> grouped = metrics.stream()
+                .collect(Collectors.groupingBy(
+                        cm -> cm.getCampaign().getName(),
+                        Collectors.groupingBy(cm -> isMonthlyGroup
+                                ? YearMonth.from(cm.getStatsDate()).toString()
+                                : cm.getStatsDate().toString())
+                ));
+
+        // 4) for each campaign, build a list of integers aligned to labels
+        List<Map<String, List<Integer>>> campaignValues = new ArrayList<>();
+        for (var entry : grouped.entrySet()) {
+            String campaignName = entry.getKey();
+            Map<String, List<CampaignMetric>> byPeriod = entry.getValue();
+
+            List<Integer> values = labels.stream()
+                    .map(label -> byPeriod.getOrDefault(label, List.of()).stream()
+                            .mapToInt(cm -> switch (metricFilter) {
+                                case CLICKS -> cm.getClicks();
+                                case IMPRESSIONS -> cm.getImpressions();
+                                case CONVERSIONS -> cm.getConversions();
+                            })
+                            .sum()
+                    )
+                    .toList();
+
+            campaignValues.add(Map.of(campaignName, values));
+        }
+
+        return new CampaignAdsStats(campaignValues, labels);
     }
 
     // ——— helpers ———
