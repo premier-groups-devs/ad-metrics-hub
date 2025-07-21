@@ -164,7 +164,7 @@ public class AdStatsService {
         boolean isMonthlyGroup = "MONTH".equals(dateRange.getType());
 
         // 1) fetch all metrics in window
-        List<String> activeStatuses = Arrays.asList("ENABLED", "ACTIVE");
+        List<String> activeStatuses = List.of("ENABLED", "ACTIVE");
         List<CampaignMetric> metrics = campaignMetricRepository
                 .findByCampaign_MarketingChannel_IdAndCampaign_StatusInAndStatsDateBetween(
                         marketingChannelId,
@@ -174,32 +174,31 @@ public class AdStatsService {
                 );
 
         // 2) build the list of labels (strings)
-        List<String> labels;
-        if (isMonthlyGroup) {
-            labels = metrics.stream()
-                    .map(cm -> YearMonth.from(cm.getStatsDate()))
-                    .distinct()
-                    .sorted()
-                    .map(YearMonth::toString)
-                    .toList();
-        } else {
-            labels = metrics.stream()
-                    .map(cm -> cm.getStatsDate().toString())
-                    .distinct()
-                    .sorted()
-                    .toList();
-        }
+        List<String> labels = isMonthlyGroup
+                ? metrics.stream()
+                .map(cm -> YearMonth.from(cm.getStatsDate()))
+                .distinct()
+                .sorted()
+                .map(YearMonth::toString)
+                .toList()
+                : metrics.stream()
+                .map(cm -> cm.getStatsDate().toString())
+                .distinct()
+                .sorted()
+                .toList();
 
         // 3) group metrics by campaign name and by period key
         Map<String, Map<String, List<CampaignMetric>>> grouped = metrics.stream()
                 .collect(Collectors.groupingBy(
                         cm -> cm.getCampaign().getName(),
-                        Collectors.groupingBy(cm -> isMonthlyGroup
-                                ? YearMonth.from(cm.getStatsDate()).toString()
-                                : cm.getStatsDate().toString())
+                        Collectors.groupingBy(cm ->
+                                isMonthlyGroup
+                                        ? YearMonth.from(cm.getStatsDate()).toString()
+                                        : cm.getStatsDate().toString()
+                        )
                 ));
 
-        // 4) for each campaign, build a list of integers aligned to labels
+        // 4) for each campaign, build a list of metric values aligned to labels
         List<Map<String, List<Integer>>> campaignValues = new ArrayList<>();
         for (var entry : grouped.entrySet()) {
             String campaignName = entry.getKey();
@@ -219,7 +218,44 @@ public class AdStatsService {
             campaignValues.add(Map.of(campaignName, values));
         }
 
-        return new CampaignAdsStats(campaignValues, labels);
+        // 5) compute total cost per campaign
+        Map<String, BigDecimal> campaignCostsRelatedValues = grouped.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,                        // campaign name
+                        e -> {
+                            // sum up all costs for this campaign
+                            BigDecimal totalCost = e.getValue().values().stream()
+                                    .flatMap(List::stream)
+                                    .map(CampaignMetric::getCost)      // assume BigDecimal getCost()
+                                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                            // sum up all metrics for this campaign
+                            int totalMetric = e.getValue().values().stream()
+                                    .flatMap(List::stream)
+                                    .mapToInt(cm -> switch (metricFilter) {
+                                        case CLICKS -> cm.getClicks();
+                                        case IMPRESSIONS -> cm.getImpressions();
+                                        case CONVERSIONS -> cm.getConversions();
+                                    })
+                                    .sum();
+
+                            // avoid division-by-zero
+                            if (totalMetric == 0) {
+                                return BigDecimal.ZERO;
+                            }
+
+                            // cost per metric
+                            return totalCost
+                                    .divide(BigDecimal.valueOf(totalMetric), 2, RoundingMode.HALF_UP);
+                        }
+                ));
+
+        // 6) return with all three fields
+        return new CampaignAdsStats(
+                campaignValues,
+                campaignCostsRelatedValues,
+                labels
+        );
     }
 
     // ——— helpers ———
