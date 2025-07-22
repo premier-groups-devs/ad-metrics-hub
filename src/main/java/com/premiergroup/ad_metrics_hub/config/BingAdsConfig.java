@@ -14,14 +14,6 @@ import java.net.URL;
 @Log4j2
 public class BingAdsConfig {
 
-//    private static final String CLIENT_ID = AdMetricsHubApplication.dotenv.get("BINGADS_CLIENT_ID");
-//    private static final String CLIENT_SECRET = AdMetricsHubApplication.dotenv.get("BINGADS_CLIENT_SECRET");
-//    private static final String REDIRECT_URI = AdMetricsHubApplication.dotenv.get("BINGADS_REDIRECT_URI");
-//    private static final String REFRESH_TOKEN = AdMetricsHubApplication.dotenv.get("BINGADS_REFRESH_TOKEN");
-//    private static final String DEVELOPER_TOKEN = AdMetricsHubApplication.dotenv.get("BINGADS_DEVELOPER_TOKEN");
-//    private static final long CUSTOMER_ID = Long.parseLong(AdMetricsHubApplication.dotenv.get("BINGADS_CUSTOMER_ID"));
-//    private static final long ACCOUNT_ID = Long.parseLong(AdMetricsHubApplication.dotenv.get("BINGADS_ACCOUNT_ID"));
-
     @Value("${bingads.client-id}")
     private String clientId;
 
