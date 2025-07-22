@@ -37,7 +37,7 @@ public class GoogleAdsAPIService {
     private final MarketingChannelRepository channelRepository;
     private final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-    @Value("${google.ads.customerId}")
+    @Value("${google.ads.customer-id}")
     private long customerId;
 
     /**

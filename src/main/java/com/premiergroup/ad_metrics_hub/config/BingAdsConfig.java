@@ -22,25 +22,25 @@ public class BingAdsConfig {
 //    private static final long CUSTOMER_ID = Long.parseLong(AdMetricsHubApplication.dotenv.get("BINGADS_CUSTOMER_ID"));
 //    private static final long ACCOUNT_ID = Long.parseLong(AdMetricsHubApplication.dotenv.get("BINGADS_ACCOUNT_ID"));
 
-    @Value("${bingads.clientId}")
+    @Value("${bingads.client-id}")
     private String clientId;
 
-    @Value("${bingads.clientSecret}")
+    @Value("${bingads.client-secret}")
     private String clientSecret;
 
-    @Value("${bingads.redirectUri}")
+    @Value("${bingads.redirect-uri}")
     private String redirectUri;
 
-    @Value("${bingads.refreshToken}")
+    @Value("${bingads.refresh-token}")
     private String refreshToken;
 
-    @Value("${bingads.developerToken}")
+    @Value("${bingads.developer-token}")
     private String developerToken;
 
-    @Value("${bingads.customerId}")
+    @Value("${bingads.customer-id}")
     private long customerId;
 
-    @Value("${bingads.accountId}")
+    @Value("${bingads.account-id}")
     private long accountId;
 
     @Bean

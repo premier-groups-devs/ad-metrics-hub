@@ -18,13 +18,13 @@ public class GoogleAdsConfig {
 //    private static final long MCC_CUSTOMER_ID = Long.parseLong(AdMetricsHubApplication.dotenv.get("GOOGLE_ADS_MCC_CUSTOMER_ID"));
 //    public static final long CUSTOMER_ID = Long.parseLong(AdMetricsHubApplication.dotenv.get("GOOGLE_ADS_CUSTOMER_ID"));
 
-    @Value("${google.ads.developerToken}")
+    @Value("${google.ads.developer-token}")
     private String developerToken;
 
-    @Value("${google.ads.credentialsPath}")
+    @Value("${google.ads.credentials-path}")
     private String credentialsPath;
 
-    @Value("${google.ads.mccCustomerId}")
+    @Value("${google.ads.mcc-customer-id}")
     private long mccCustomerId;
 
 

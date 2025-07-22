@@ -26,7 +26,7 @@ public class AdStatsController {
     private final GoogleAdsAPIService googleAdsAPIService;
     private final BingAdsAPIService bingAdsAPIService;
 
-    @Value("${google.ads.customerId}")
+    @Value("${google.ads.customer-id}")
     private long customerId;
 
     @GetMapping("/widget-ads-stats")
