@@ -2,7 +2,6 @@ package com.premiergroup.ad_metrics_hub.controller;
 
 import com.microsoft.bingads.v13.campaignmanagement.AdApiFaultDetail_Exception;
 import com.microsoft.bingads.v13.campaignmanagement.ApiFaultDetail_Exception;
-import com.premiergroup.ad_metrics_hub.config.GoogleAdsConfig;
 import com.premiergroup.ad_metrics_hub.dto.CampaignAdsStats;
 import com.premiergroup.ad_metrics_hub.dto.WidgetAdsStats;
 import com.premiergroup.ad_metrics_hub.enums.DateFilter;
@@ -11,7 +10,8 @@ import com.premiergroup.ad_metrics_hub.service.AdStatsService;
 import com.premiergroup.ad_metrics_hub.service.BingAdsAPIService;
 import com.premiergroup.ad_metrics_hub.service.GoogleAdsAPIService;
 import jakarta.validation.constraints.Positive;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,12 +19,15 @@ import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/api/ads")
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class AdStatsController {
 
     private final AdStatsService adStatsService;
     private final GoogleAdsAPIService googleAdsAPIService;
     private final BingAdsAPIService bingAdsAPIService;
+
+    @Value("${google.ads.customerId}")
+    private long customerId;
 
     @GetMapping("/widget-ads-stats")
     public ResponseEntity<WidgetAdsStats> getSWidgetAdsStats(
@@ -66,8 +69,7 @@ public class AdStatsController {
             int marketingChannelId) throws ApiFaultDetail_Exception, AdApiFaultDetail_Exception, ExecutionException, InterruptedException {
 
         if (1 == marketingChannelId) { //Google Ads
-
-            googleAdsAPIService.syncCampaignsAndMetrics(GoogleAdsConfig.CUSTOMER_ID, marketingChannelId);
+            googleAdsAPIService.syncCampaignsAndMetrics(customerId, marketingChannelId);
         } else if (5 == marketingChannelId) { //Bing Ads
 
             bingAdsAPIService.syncCampaigns(marketingChannelId);

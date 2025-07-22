@@ -6,7 +6,6 @@ import com.google.ads.googleads.v20.services.GoogleAdsRow;
 import com.google.ads.googleads.v20.services.GoogleAdsServiceClient;
 import com.google.ads.googleads.v20.services.SearchGoogleAdsStreamRequest;
 import com.google.ads.googleads.v20.services.SearchGoogleAdsStreamResponse;
-import com.premiergroup.ad_metrics_hub.config.GoogleAdsConfig;
 import com.premiergroup.ad_metrics_hub.entity.Campaign;
 import com.premiergroup.ad_metrics_hub.entity.CampaignMetric;
 import com.premiergroup.ad_metrics_hub.entity.MarketingChannel;
@@ -14,19 +13,22 @@ import com.premiergroup.ad_metrics_hub.repository.CampaignMetricRepository;
 import com.premiergroup.ad_metrics_hub.repository.CampaignRepository;
 import com.premiergroup.ad_metrics_hub.repository.MarketingChannelRepository;
 import jakarta.transaction.Transactional;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 @Log4j2
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class GoogleAdsAPIService {
 
     private final GoogleAdsClient googleAdsClient;
@@ -35,6 +37,9 @@ public class GoogleAdsAPIService {
     private final MarketingChannelRepository channelRepository;
     private final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
+    @Value("${google.ads.customerId}")
+    private long customerId;
+
     /**
      * Every day at 2 AM, fetch yesterday's stats for all campaigns
      * under the given marketing channel and persist them.
@@ -42,7 +47,6 @@ public class GoogleAdsAPIService {
     @Scheduled(cron = "0 0 2 * * *")
     @Transactional
     public void dailyGoogleAdsSync() {
-        long customerId = GoogleAdsConfig.CUSTOMER_ID;
         Integer marketingChannelId = 1;                     //Google Ads channel ID
         LocalDate yesterday = LocalDate.now().minusDays(1);
 
