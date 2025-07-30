@@ -206,9 +206,13 @@ public class BingAdsAPIService {
         ));
         req.setColumns(cols);
 
+        String tmp = System.getProperty("java.io.tmpdir");
+        File tmpDir = new File(tmp, "bingReports");
+        tmpDir.mkdirs();  // ensure it exists
+
         ReportingDownloadParameters dl = new ReportingDownloadParameters();
         dl.setReportRequest(req);
-        dl.setResultFileDirectory(new File("src/main/resources/"));
+        dl.setResultFileDirectory(tmpDir);
         dl.setResultFileName("campaign_report.csv");
         dl.setOverwriteResultFile(true);
 
