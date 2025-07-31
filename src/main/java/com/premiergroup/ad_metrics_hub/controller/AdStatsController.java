@@ -2,7 +2,8 @@ package com.premiergroup.ad_metrics_hub.controller;
 
 import com.microsoft.bingads.v13.campaignmanagement.AdApiFaultDetail_Exception;
 import com.microsoft.bingads.v13.campaignmanagement.ApiFaultDetail_Exception;
-import com.premiergroup.ad_metrics_hub.dto.CampaignAdsStats;
+import com.premiergroup.ad_metrics_hub.dto.CampaignAdsStatsGraph;
+import com.premiergroup.ad_metrics_hub.dto.CampaignAdsStatsTableRow;
 import com.premiergroup.ad_metrics_hub.dto.WidgetAdsStats;
 import com.premiergroup.ad_metrics_hub.enums.DateFilter;
 import com.premiergroup.ad_metrics_hub.enums.MetricFilter;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 @RestController
@@ -43,17 +45,29 @@ public class AdStatsController {
         return ResponseEntity.ok(widgetStats);
     }
 
-    @GetMapping("/campaign-ads-stats")
-    public ResponseEntity<CampaignAdsStats> getCampaignAdsStats(
+    @GetMapping("/campaign-ads-stats-graph")
+    public ResponseEntity<CampaignAdsStatsGraph> getCampaignAdsStatsGraph(
             @RequestParam Integer marketingChannelId,
             @RequestParam DateFilter dateRange,
             @RequestParam MetricFilter metric
     ) {
-        CampaignAdsStats campaignAdsStats = adStatsService.getCampaignAdsStats(marketingChannelId, dateRange, metric);
-        if (campaignAdsStats == null) {
+        CampaignAdsStatsGraph campaignAdsStatsGraph = adStatsService.getCampaignAdsStatsGraph(marketingChannelId, dateRange, metric);
+        if (campaignAdsStatsGraph == null) {
             return ResponseEntity.noContent().build();
         }
-        return ResponseEntity.ok(campaignAdsStats);
+        return ResponseEntity.ok(campaignAdsStatsGraph);
+    }
+
+    @GetMapping("/campaign-ads-stats-table")
+    public ResponseEntity<List<CampaignAdsStatsTableRow>> getCampaignAdsStatsTable(
+            @RequestParam Integer marketingChannelId,
+            @RequestParam DateFilter dateRange
+    ) {
+        List<CampaignAdsStatsTableRow> campaignAdsStatsTableRowList = adStatsService.getCampaignAdsStatsTable(marketingChannelId, dateRange);
+        if (campaignAdsStatsTableRowList.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(campaignAdsStatsTableRowList);
     }
 
     /**

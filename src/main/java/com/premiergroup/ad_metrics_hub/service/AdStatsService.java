@@ -1,8 +1,10 @@
 package com.premiergroup.ad_metrics_hub.service;
 
-import com.premiergroup.ad_metrics_hub.dto.CampaignAdsStats;
+import com.premiergroup.ad_metrics_hub.dto.CampaignAdsStatsGraph;
+import com.premiergroup.ad_metrics_hub.dto.CampaignAdsStatsTableRow;
 import com.premiergroup.ad_metrics_hub.dto.MetricStats;
 import com.premiergroup.ad_metrics_hub.dto.WidgetAdsStats;
+import com.premiergroup.ad_metrics_hub.entity.Campaign;
 import com.premiergroup.ad_metrics_hub.entity.CampaignMetric;
 import com.premiergroup.ad_metrics_hub.enums.DateFilter;
 import com.premiergroup.ad_metrics_hub.enums.MetricFilter;
@@ -154,7 +156,7 @@ public class AdStatsService {
         );
     }
 
-    public CampaignAdsStats getCampaignAdsStats(
+    public CampaignAdsStatsGraph getCampaignAdsStatsGraph(
             Integer marketingChannelId,
             DateFilter dateRange,
             MetricFilter metricFilter
@@ -251,11 +253,109 @@ public class AdStatsService {
                 ));
 
         // 6) return with all three fields
-        return new CampaignAdsStats(
+        return new CampaignAdsStatsGraph(
                 campaignValues,
                 campaignCostsRelatedValues,
                 labels
         );
+    }
+
+    public List<CampaignAdsStatsTableRow> getCampaignAdsStatsTable(
+            Integer marketingChannelId,
+            DateFilter dateRange
+    ) {
+        LocalDate start = dateRange.getStartDate();
+        LocalDate end = dateRange.getEndDate();
+
+        // — determine previous period window —
+        long days = DAYS.between(start, end) + 1;
+        LocalDate prevEnd = start.minusDays(1);
+        LocalDate prevStart = prevEnd.minusDays(days - 1);
+
+        // — fetch metrics for both periods, only ACTIVE/ENABLED campaigns —
+        List<CampaignMetric> currMetrics = campaignMetricRepository
+                .findByCampaign_MarketingChannel_IdAndStatsDateBetween(
+                        marketingChannelId, start, end);
+        List<CampaignMetric> prevMetrics = campaignMetricRepository
+                .findByCampaign_MarketingChannel_IdAndStatsDateBetween(
+                        marketingChannelId, prevStart, prevEnd);
+
+        // — group by Campaign —
+        Map<Campaign, List<CampaignMetric>> currByCamp = currMetrics.stream()
+                .collect(Collectors.groupingBy(CampaignMetric::getCampaign));
+        Map<Campaign, List<CampaignMetric>> prevByCamp = prevMetrics.stream()
+                .collect(Collectors.groupingBy(CampaignMetric::getCampaign));
+
+        List<CampaignAdsStatsTableRow> rows = new ArrayList<>();
+        for (var entry : currByCamp.entrySet()) {
+            Campaign campaign = entry.getKey();
+            List<CampaignMetric> cmCurr = entry.getValue();
+            List<CampaignMetric> cmPrev = prevByCamp.getOrDefault(campaign, List.of());
+
+            // — current totals —
+            int currImpr = cmCurr.stream().mapToInt(CampaignMetric::getImpressions).sum();
+            int currClicks = cmCurr.stream().mapToInt(CampaignMetric::getClicks).sum();
+            int currConv = cmCurr.stream().mapToInt(CampaignMetric::getConversions).sum();
+            BigDecimal currCost = cmCurr.stream()
+                    .map(CampaignMetric::getCost)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            BigDecimal currCPC = currConv > 0
+                    ? currCost.divide(BigDecimal.valueOf(currConv), 2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+            BigDecimal currCR = currClicks > 0
+                    ? BigDecimal.valueOf(currConv)
+                    .divide(BigDecimal.valueOf(currClicks), 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100))
+                    : BigDecimal.ZERO;
+
+            // — previous totals —
+            int prevImpr = cmPrev.stream().mapToInt(CampaignMetric::getImpressions).sum();
+            int prevClicks = cmPrev.stream().mapToInt(CampaignMetric::getClicks).sum();
+            int prevConv = cmPrev.stream().mapToInt(CampaignMetric::getConversions).sum();
+            BigDecimal prevCost = cmPrev.stream()
+                    .map(CampaignMetric::getCost)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            BigDecimal prevCPC = prevConv > 0
+                    ? prevCost.divide(BigDecimal.valueOf(prevConv), 2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+            BigDecimal prevCR = prevClicks > 0
+                    ? BigDecimal.valueOf(prevConv)
+                    .divide(BigDecimal.valueOf(prevClicks), 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100))
+                    : BigDecimal.ZERO;
+
+            // — percent changes —
+            BigDecimal imprPct = percentChange(BigDecimal.valueOf(currImpr), BigDecimal.valueOf(prevImpr));
+            BigDecimal clicksPct = percentChange(BigDecimal.valueOf(currClicks), BigDecimal.valueOf(prevClicks));
+            BigDecimal convPct = percentChange(BigDecimal.valueOf(currConv), BigDecimal.valueOf(prevConv));
+            BigDecimal costPct = percentChange(currCost, prevCost);
+            BigDecimal cpcPct = percentChange(currCPC, prevCPC);
+            BigDecimal crPct = percentChange(currCR, prevCR);
+
+            // — wrap into MetricStats (empty labels/values) —
+            var imprStats = new MetricStats<>(List.of(), List.of(), currImpr, imprPct);
+            var clicksStats = new MetricStats<>(List.of(), List.of(), currClicks, clicksPct);
+            var convStats = new MetricStats<>(List.of(), List.of(), currConv, convPct);
+            var costStats = new MetricStats<>(List.of(), List.of(), currCost, costPct);
+            var cpcStats = new MetricStats<>(List.of(), List.of(), currCPC, cpcPct);
+            var crStats = new MetricStats<>(List.of(), List.of(), currCR, crPct);
+
+            // — assemble row —
+            rows.add(new CampaignAdsStatsTableRow(
+                    campaign.getName(),
+                    campaign.getStatus(),    // assuming getStatus() returns CampaignStatus
+                    imprStats,
+                    clicksStats,
+                    convStats,
+                    costStats,
+                    cpcStats,
+                    crStats
+            ));
+        }
+
+        return rows;
     }
 
     // ——— helpers ———
@@ -403,4 +503,6 @@ public class AdStatsService {
 
         return new MetricStats<>(labels, values, rateThis, pct);
     }
+
+
 }
