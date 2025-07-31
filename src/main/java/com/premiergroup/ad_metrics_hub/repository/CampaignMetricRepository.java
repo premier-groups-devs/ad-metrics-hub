@@ -5,8 +5,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface CampaignMetricRepository extends JpaRepository<CampaignMetric, Integer> {
+
+    Optional<CampaignMetric> findByCampaign_IdAndStatsDate(Integer campaignId, LocalDate statsDate);
 
     List<CampaignMetric> findByCampaign_MarketingChannel_IdAndStatsDateBetween(
             Integer marketingChannelsId,

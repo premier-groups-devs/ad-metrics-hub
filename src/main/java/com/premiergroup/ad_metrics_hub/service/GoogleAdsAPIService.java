@@ -41,16 +41,15 @@ public class GoogleAdsAPIService {
     private long customerId;
 
     /**
-     * Every day at 2 AM, fetch yesterday's stats for all campaigns
-     * under the given marketing channel and persist them.
+     * Scheduled task to sync Google Ads campaigns and metrics daily each hour at 58 minutes past the hour.
+     * Runs every hour at the top of the hour.
      */
-    @Scheduled(cron = "0 0 2 * * *")
+    @Scheduled(cron = "0 58 * * * *")
     @Transactional
     public void dailyGoogleAdsSync() {
         Integer marketingChannelId = 1;                     //Google Ads channel ID
-        LocalDate yesterday = LocalDate.now().minusDays(1);
 
-        log.info("Starting scheduled Google Ads sync for date {}", yesterday);
+        log.info("Starting scheduled Google Ads sync for today: {}", LocalDate.now());
         // load the channel
         MarketingChannel channel = channelRepository.findById(marketingChannelId)
                 .orElseThrow(() ->
@@ -60,11 +59,11 @@ public class GoogleAdsAPIService {
         // ensure campaigns are up to date
         List<Campaign> campaigns = listAndSaveCampaigns(customerId, channel);
 
-        // fetch & save metrics for *only* yesterday
+        // Sync metrics for the last day
         campaigns.forEach(c ->
-                saveMetrics(customerId, c, yesterday, yesterday)
+                saveMetrics(customerId, c, LocalDate.now(), LocalDate.now())
         );
-        log.info("Finished scheduled Google Ads sync for date {}", yesterday);
+        log.info("Completed scheduled Google Ads sync");
     }
 
     @Transactional
@@ -120,7 +119,7 @@ public class GoogleAdsAPIService {
     }
 
     /**
-     * Fetches and saves daily metrics for one campaign over a date range.
+     * Fetches and saves metrics for a specific campaign
      */
     private void saveMetrics(long customerId, Campaign campaign,
                              LocalDate startDate, LocalDate endDate) {
@@ -139,7 +138,6 @@ public class GoogleAdsAPIService {
                 "ORDER BY segments.date"
         ));
 
-        List<CampaignMetric> metrics = new ArrayList<>();
         try (GoogleAdsServiceClient service = googleAdsClient.getLatestVersion()
                 .createGoogleAdsServiceClient()) {
 
@@ -155,47 +153,54 @@ public class GoogleAdsAPIService {
                             row.getMetrics().getCostMicros() / 1_000_000.0
                     );
 
-                    CampaignMetric cm = CampaignMetric.builder()
+                    // 1. Check if a metric for this date already exists
+                    Optional<CampaignMetric> existingOpt =
+                            metricRepository.findByCampaign_IdAndStatsDate(campaign.getId(), date);
+
+                    // 2. If it exists, use it; otherwise create a new one
+                    CampaignMetric metric = existingOpt.orElseGet(() -> CampaignMetric.builder()
                             .campaign(campaign)
                             .statsDate(date)
-                            .clicks(Math.toIntExact(row.getMetrics().getClicks()))
-                            .impressions(Math.toIntExact(row.getMetrics().getImpressions()))
-                            .cost(cost)
-                            .ctr(BigDecimal.valueOf(row.getMetrics().getCtr()))
-                            .avgCpc(BigDecimal.valueOf(
-                                    row.getMetrics().getAverageCpc() / 1_000_000.0
-                            ))
-                            .conversions((int) row.getMetrics().getConversions())
-                            .conversionRate(BigDecimal.valueOf(
-                                    row.getMetrics().getClicks() > 0 ?
-                                            (row.getMetrics().getConversions() * 100 / row.getMetrics().getClicks())
-                                            : 0)
+                            .build());
+
+                    // 3. Populate fields (both for new and existing)
+                    metric.setClicks(Math.toIntExact(row.getMetrics().getClicks()));
+                    metric.setImpressions(Math.toIntExact(row.getMetrics().getImpressions()));
+                    metric.setCost(cost);
+                    metric.setCtr(BigDecimal.valueOf(row.getMetrics().getCtr()));
+                    metric.setAvgCpc(BigDecimal.valueOf(
+                            row.getMetrics().getAverageCpc() / 1_000_000.0
+                    ));
+                    metric.setConversions((int) row.getMetrics().getConversions());
+                    metric.setConversionRate(BigDecimal.valueOf(
+                            row.getMetrics().getClicks() > 0
+                                    ? (row.getMetrics().getConversions() * 100.0 / row.getMetrics().getClicks())
+                                    : 0.0
+                    ));
+                    metric.setCostPerConversion(BigDecimal.valueOf(
+                            row.getMetrics().getCostPerConversion() / 1_000_000.0
+                    ));
+                    metric.setConversionValue(BigDecimal.valueOf(
+                            row.getMetrics().getAllConversionsValue()
+                    ));
+                    metric.setValuePerConversion(BigDecimal.valueOf(
+                            row.getMetrics().getValuePerConversion()
+                    ));
+                    metric.setRoas(cost.compareTo(BigDecimal.ZERO) > 0
+                                    ? BigDecimal.valueOf(
+                                    row.getMetrics().getAllConversionsValue() /
+                                            (row.getMetrics().getCostMicros() / 1_000_000.0)
                             )
-                            .costPerConversion(BigDecimal.valueOf(
-                                    row.getMetrics().getCostPerConversion() / 1_000_000.0
-                            ))
-                            .conversionValue(BigDecimal.valueOf(
-                                    row.getMetrics().getAllConversionsValue()
-                            ))
-                            .valuePerConversion(BigDecimal.valueOf(
-                                    row.getMetrics().getValuePerConversion()
-                            ))
-                            .roas(cost.compareTo(BigDecimal.ZERO) > 0 ?
-                                    BigDecimal.valueOf(
-                                            row.getMetrics().getAllConversionsValue() /
-                                                    (row.getMetrics().getCostMicros() / 1_000_000.0)
-                                    ) : BigDecimal.ZERO
-                            )
-                            .build();
-                    metrics.add(cm);
+                                    : BigDecimal.ZERO
+                    );
+
+                    // 4. Save this metric (update or insert)
+                    metricRepository.save(metric);
                 }
             }
         } catch (GoogleAdsException e) {
             log.error("Error fetching metrics: {}", e.getMessage());
         }
-
-        // cascade = ALL, so saving metrics will persist via campaign if set
-        metricRepository.saveAll(metrics);
     }
 
     /**

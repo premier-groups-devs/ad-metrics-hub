@@ -34,7 +34,6 @@ public class AdStatsController {
             @RequestParam Integer marketingChannelId,
             @RequestParam DateFilter dateRange
     ) {
-        //TODO MAKE DTO ACCORDING TO THE GRAPH IN THE FRONTEND
         //TODO GET STATS FROM DEVICES
         WidgetAdsStats widgetStats = adStatsService.getSWidgetAdsStats(marketingChannelId, dateRange);
 

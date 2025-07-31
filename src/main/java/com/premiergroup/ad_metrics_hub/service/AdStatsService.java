@@ -340,6 +340,8 @@ public class AdStatsService {
             int conv = convMap.getOrDefault(k, 0);
             if (conv > 0) {
                 series.put(k, c.divide(BigDecimal.valueOf(conv), 4, RoundingMode.HALF_UP));
+            } else {
+                series.put(k, BigDecimal.ZERO); // no conversions, set to zero
             }
         });
 
@@ -373,11 +375,11 @@ public class AdStatsService {
         Map<?, Integer> clickMap = isYear ? monthlyClicks : dailyClicks;
 
         Map<Object, BigDecimal> series = new TreeMap<>();
-        clickMap.forEach((k, clk) -> {
+        clickMap.forEach((k, clicks) -> {
             int conv = convMap.getOrDefault(k, 0);
-            if (clk > 0) {
+            if (clicks > 0) {
                 BigDecimal rate = BigDecimal.valueOf(conv)
-                        .divide(BigDecimal.valueOf(clk), 4, RoundingMode.HALF_UP)
+                        .divide(BigDecimal.valueOf(clicks), 4, RoundingMode.HALF_UP)
                         .multiply(BigDecimal.valueOf(100));
                 series.put(k, rate);
             }

@@ -42,22 +42,22 @@ public class BingAdsAPIService {
     private final MarketingChannelRepository channelRepository;
 
     /**
-     * Runs every day at 2:10 AM to sync Bing Ads campaigns and metrics.
+     * Scheduled task to sync Bing Ads campaigns and metrics daily each hour at 59 minutes past the hour.
      */
-    @Scheduled(cron = "0 10 2 * * ?")
+    @Scheduled(cron = "0 59 * * * *")
     public void dailyBingAdsSync() {
-        LocalDate yesterday = LocalDate.now().minusDays(1);
         int marketingChannelId = 5;                     //Bing Ads channel ID
 
         try {
-            log.info("Starting daily Bing Ads sync for date {}", yesterday);
+            log.info("Starting scheduled Bing Ads sync today: {}", LocalDate.now());
+
             // Ensure campaigns are up to date
             syncCampaigns(marketingChannelId);
-            // Fetch only yesterday's metrics
-            syncMetricsForDate(marketingChannelId, yesterday, yesterday);
-            log.info("Finished daily Bing Ads sync for date {}", yesterday);
+            // Sync metrics for the last day
+            syncMetricsForDate(marketingChannelId, LocalDate.now(), LocalDate.now());
+            log.info("Completed scheduled Bing Ads sync");
         } catch (Exception ex) {
-            log.error("Error during scheduled Bing Ads sync for date {}", yesterday, ex);
+            log.error("Error during scheduled Bing Ads sync", ex);
         }
     }
 
@@ -134,19 +134,28 @@ public class BingAdsAPIService {
                         .findByMarketingChannel_IdAndCampaignId(channel.getId(), svcCampId)
                         .orElseThrow(() -> new IllegalStateException("Unknown campaign: " + svcCampId));
 
-                //TODO found a way to get the value for: cost_per_conversion, conversion_value, value_per_conversion, roas
-                CampaignMetric metric = CampaignMetric.builder()
-                        .campaign(camp)
-                        .statsDate(statsDate)
-                        .impressions(impressions)
-                        .clicks(clicks)
-                        .cost(spend)
-                        .ctr(ctr)
-                        .avgCpc(avgCpc)
-                        .conversions(conversions)
-                        .conversionRate(convRate)
-                        .build();
+                // 1. Look for existing metric
+                Optional<CampaignMetric> existingOpt =
+                        metricRepository.findByCampaign_IdAndStatsDate(camp.getId(), statsDate);
 
+                CampaignMetric metric = existingOpt
+                        .orElseGet(() -> CampaignMetric.builder()
+                                .campaign(camp)
+                                .statsDate(statsDate)
+                                .build());
+
+                // 2. Update or set fields
+                metric.setImpressions(impressions);
+                metric.setClicks(clicks);
+                metric.setCost(spend);
+                metric.setCtr(ctr);
+                metric.setAvgCpc(avgCpc);
+                metric.setConversions(conversions);
+                metric.setConversionRate(convRate);
+
+                // TODO: values for costPerConversion, conversionValue, valuePerConversion, roas,
+
+                // 3. Save each metric (will insert or update)
                 metricRepository.save(metric);
             });
         } catch (IOException e) {
