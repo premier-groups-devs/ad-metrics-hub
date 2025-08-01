@@ -166,11 +166,9 @@ public class AdStatsService {
         boolean isMonthlyGroup = "MONTH".equals(dateRange.getType());
 
         // 1) fetch all metrics in window
-        List<String> activeStatuses = List.of("ENABLED", "ACTIVE");
         List<CampaignMetric> metrics = campaignMetricRepository
-                .findByCampaign_MarketingChannel_IdAndCampaign_StatusInAndStatsDateBetween(
+                .findByCampaign_MarketingChannel_IdAndStatsDateBetween(
                         marketingChannelId,
-                        activeStatuses,
                         start,
                         end
                 );
