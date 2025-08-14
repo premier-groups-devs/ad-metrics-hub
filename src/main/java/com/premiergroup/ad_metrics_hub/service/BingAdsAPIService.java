@@ -49,12 +49,12 @@ public class BingAdsAPIService {
         int marketingChannelId = 5;                     //Bing Ads channel ID
 
         try {
-            log.info("Starting scheduled Bing Ads sync today: {}", LocalDate.now());
+            log.info("Starting scheduled Bing Ads sync");
 
             // Ensure campaigns are up to date
             syncCampaigns(marketingChannelId);
-            // Sync metrics for the last day
-            syncMetricsForDate(marketingChannelId, LocalDate.now(), LocalDate.now());
+            // Sync metrics since the last day
+            syncMetricsForDate(marketingChannelId, LocalDate.now().minusDays(1), LocalDate.now());
             log.info("Completed scheduled Bing Ads sync");
         } catch (Exception ex) {
             log.error("Error during scheduled Bing Ads sync", ex);
@@ -92,7 +92,8 @@ public class BingAdsAPIService {
     public void syncAllMetrics(int marketingChannelId) throws ExecutionException, InterruptedException {
         // Download report for entire range
         LocalDate start = LocalDate.of(2000, 1, 1);
-        LocalDate end = LocalDate.now().minusDays(1);
+        // LocalDate end = LocalDate.now().minusDays(1);
+        LocalDate end = LocalDate.now();
 
         //Additionally, call dailyBingAdsSync scheduled task for daily updates
         syncMetricsForDate(marketingChannelId, start, end);

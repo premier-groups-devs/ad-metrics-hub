@@ -49,7 +49,7 @@ public class GoogleAdsAPIService {
     public void dailyGoogleAdsSync() {
         Integer marketingChannelId = 1;                     //Google Ads channel ID
 
-        log.info("Starting scheduled Google Ads sync for today: {}", LocalDate.now());
+        log.info("Starting scheduled Google Ads sync");
         // load the channel
         MarketingChannel channel = channelRepository.findById(marketingChannelId)
                 .orElseThrow(() ->
@@ -61,7 +61,7 @@ public class GoogleAdsAPIService {
 
         // Sync metrics for the last day
         campaigns.forEach(c ->
-                saveMetrics(customerId, c, LocalDate.now(), LocalDate.now())
+                saveMetrics(customerId, c, LocalDate.now().minusDays(1), LocalDate.now())
         );
         log.info("Completed scheduled Google Ads sync");
     }
@@ -74,7 +74,8 @@ public class GoogleAdsAPIService {
 
         List<Campaign> saved = listAndSaveCampaigns(customerId, channel);
         LocalDate start = getFirstStatDate(googleAdsClient, customerId);
-        LocalDate end = LocalDate.now().minusDays(1); // yesterday
+//        LocalDate end = LocalDate.now().minusDays(1); // yesterday
+        LocalDate end = LocalDate.now();
 
         //Additionally, call dailyGoogleAdsStats scheduled task for daily updates
         saved.forEach(campaign -> saveMetrics(customerId, campaign, start, end));
