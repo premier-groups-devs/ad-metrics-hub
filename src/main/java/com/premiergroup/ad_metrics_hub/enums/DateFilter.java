@@ -1,5 +1,6 @@
 package com.premiergroup.ad_metrics_hub.enums;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
 
@@ -15,7 +16,8 @@ public enum DateFilter {
     TODAY,
     LAST_7_DAYS,
     LAST_30_DAYS,
-    LAST_90_DAYS;
+    LAST_90_DAYS,
+    CUSTOM;
 
     public String getType() {
         return switch (this) {
@@ -28,14 +30,14 @@ public enum DateFilter {
         LocalDate today = LocalDate.now();
 
         return switch (this) {
-            case LAST_WEEK -> today.minusWeeks(1).with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
-            case THIS_WEEK -> today.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+            case LAST_WEEK -> today.minusWeeks(1).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            case THIS_WEEK -> today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
             case LAST_MONTH -> today.minusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
             case THIS_MONTH -> today.with(TemporalAdjusters.firstDayOfMonth());
             case LAST_YEAR -> today.minusYears(1).with(TemporalAdjusters.firstDayOfYear());
             case THIS_YEAR -> today.with(TemporalAdjusters.firstDayOfYear());
             case YESTERDAY -> today.minusDays(1);
-            case TODAY -> today;
+            case TODAY, CUSTOM -> today;
             case LAST_7_DAYS -> today.minusDays(7);
             case LAST_30_DAYS -> today.minusDays(30);
             case LAST_90_DAYS -> today.minusDays(90);
@@ -46,14 +48,14 @@ public enum DateFilter {
         LocalDate today = LocalDate.now();
 
         return switch (this) {
-            case LAST_WEEK -> today.minusWeeks(1).with(TemporalAdjusters.nextOrSame(java.time.DayOfWeek.SUNDAY));
-            case THIS_WEEK -> today.with(TemporalAdjusters.nextOrSame(java.time.DayOfWeek.SUNDAY));
+            case LAST_WEEK -> today.minusWeeks(1).with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
+            case THIS_WEEK -> today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
             case LAST_MONTH -> today.minusMonths(1).with(TemporalAdjusters.lastDayOfMonth());
             case THIS_MONTH -> today.with(TemporalAdjusters.lastDayOfMonth());
             case LAST_YEAR -> today.minusYears(1).with(TemporalAdjusters.lastDayOfYear());
             case THIS_YEAR -> today.with(TemporalAdjusters.lastDayOfYear());
             case YESTERDAY -> today.minusDays(1);
-            case LAST_7_DAYS, LAST_30_DAYS, LAST_90_DAYS, TODAY -> today;
+            case LAST_7_DAYS, LAST_30_DAYS, LAST_90_DAYS, TODAY, CUSTOM -> today;
         };
     }
 }

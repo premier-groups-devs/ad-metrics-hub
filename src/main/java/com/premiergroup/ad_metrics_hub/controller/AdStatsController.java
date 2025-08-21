@@ -34,10 +34,12 @@ public class AdStatsController {
     @GetMapping("/widget-ads-stats")
     public ResponseEntity<WidgetAdsStats> getSWidgetAdsStats(
             @RequestParam Integer marketingChannelId,
-            @RequestParam DateFilter dateRange
+            @RequestParam DateFilter dateRange,
+            @RequestParam String startDate,
+            @RequestParam String endDate
     ) {
         //TODO GET STATS FROM DEVICES
-        WidgetAdsStats widgetStats = adStatsService.getSWidgetAdsStats(marketingChannelId, dateRange);
+        WidgetAdsStats widgetStats = adStatsService.getSWidgetAdsStats(marketingChannelId, dateRange, startDate, endDate);
 
         if (widgetStats == null) {
             return ResponseEntity.noContent().build();
@@ -49,9 +51,11 @@ public class AdStatsController {
     public ResponseEntity<CampaignAdsStatsGraph> getCampaignAdsStatsGraph(
             @RequestParam Integer marketingChannelId,
             @RequestParam DateFilter dateRange,
+            @RequestParam String startDate,
+            @RequestParam String endDate,
             @RequestParam MetricFilter metric
     ) {
-        CampaignAdsStatsGraph campaignAdsStatsGraph = adStatsService.getCampaignAdsStatsGraph(marketingChannelId, dateRange, metric);
+        CampaignAdsStatsGraph campaignAdsStatsGraph = adStatsService.getCampaignAdsStatsGraph(marketingChannelId, dateRange, startDate, endDate, metric);
         if (campaignAdsStatsGraph == null) {
             return ResponseEntity.noContent().build();
         }
@@ -61,9 +65,11 @@ public class AdStatsController {
     @GetMapping("/campaign-ads-stats-table")
     public ResponseEntity<List<CampaignAdsStatsTableRow>> getCampaignAdsStatsTable(
             @RequestParam Integer marketingChannelId,
-            @RequestParam DateFilter dateRange
+            @RequestParam DateFilter dateRange,
+            @RequestParam String startDate,
+            @RequestParam String endDate
     ) {
-        List<CampaignAdsStatsTableRow> campaignAdsStatsTableRowList = adStatsService.getCampaignAdsStatsTable(marketingChannelId, dateRange);
+        List<CampaignAdsStatsTableRow> campaignAdsStatsTableRowList = adStatsService.getCampaignAdsStatsTable(marketingChannelId, dateRange, startDate, endDate);
         if (campaignAdsStatsTableRowList.isEmpty()) {
             return ResponseEntity.noContent().build();
         }

@@ -31,11 +31,24 @@ public class AdStatsService {
 
     public WidgetAdsStats getSWidgetAdsStats(
             Integer marketingChannelId,
-            DateFilter dateRange
+            DateFilter dateRange,
+            String startDate,
+            String endDate
     ) {
         LocalDate start = dateRange.getStartDate();
         LocalDate end = dateRange.getEndDate();
         boolean isMonthlyGroup = "MONTH".equals(dateRange.getType());
+
+        if (dateRange.equals(DateFilter.CUSTOM)) {
+            try {
+                start = LocalDate.parse(startDate);
+                end = LocalDate.parse(endDate);
+                isMonthlyGroup = DAYS.between(start, end) > 60;
+            } catch (Exception e) {
+                log.error("Invalid date format for custom date range: {} to {}", startDate, endDate, e);
+                throw new IllegalArgumentException("Invalid date format for custom date range");
+            }
+        }
 
         // 1) fetch all metrics in window
         List<CampaignMetric> currentMetrics = campaignMetricRepository
@@ -159,11 +172,24 @@ public class AdStatsService {
     public CampaignAdsStatsGraph getCampaignAdsStatsGraph(
             Integer marketingChannelId,
             DateFilter dateRange,
+            String startDate,
+            String endDate,
             MetricFilter metricFilter
     ) {
         LocalDate start = dateRange.getStartDate();
         LocalDate end = dateRange.getEndDate();
         boolean isMonthlyGroup = "MONTH".equals(dateRange.getType());
+
+        if (dateRange.equals(DateFilter.CUSTOM)) {
+            try {
+                start = LocalDate.parse(startDate);
+                end = LocalDate.parse(endDate);
+                isMonthlyGroup = DAYS.between(start, end) > 60;
+            } catch (Exception e) {
+                log.error("Invalid date format for custom date range: {} to {}", startDate, endDate, e);
+                throw new IllegalArgumentException("Invalid date format for custom date range");
+            }
+        }
 
         // 1) fetch all metrics in window
         List<CampaignMetric> metrics = campaignMetricRepository
@@ -188,11 +214,12 @@ public class AdStatsService {
                 .toList();
 
         // 3) group metrics by campaign name and by period key
+        boolean finalIsMonthlyGroup = isMonthlyGroup;
         Map<String, Map<String, List<CampaignMetric>>> grouped = metrics.stream()
                 .collect(Collectors.groupingBy(
                         cm -> cm.getCampaign().getName(),
                         Collectors.groupingBy(cm ->
-                                isMonthlyGroup
+                                finalIsMonthlyGroup
                                         ? YearMonth.from(cm.getStatsDate()).toString()
                                         : cm.getStatsDate().toString()
                         )
@@ -260,10 +287,22 @@ public class AdStatsService {
 
     public List<CampaignAdsStatsTableRow> getCampaignAdsStatsTable(
             Integer marketingChannelId,
-            DateFilter dateRange
+            DateFilter dateRange,
+            String startDate,
+            String endDate
     ) {
         LocalDate start = dateRange.getStartDate();
         LocalDate end = dateRange.getEndDate();
+
+        if (dateRange.equals(DateFilter.CUSTOM)) {
+            try {
+                start = LocalDate.parse(startDate);
+                end = LocalDate.parse(endDate);
+            } catch (Exception e) {
+                log.error("Invalid date format for custom date range: {} to {}", startDate, endDate, e);
+                throw new IllegalArgumentException("Invalid date format for custom date range");
+            }
+        }
 
         // — determine previous period window —
         long days = DAYS.between(start, end) + 1;
